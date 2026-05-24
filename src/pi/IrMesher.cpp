@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
+#include <set>
 #include <numbers>
 #include <vector>
 
@@ -140,6 +142,122 @@ LayerSubmesh mesh_one_layer(const model::Board& board, const MeshConfig& cfg,
         }
     }
     return sm;
+}
+
+// Drop nodes in components that lack BOTH a source AND a sink, then
+// renumber the survivors so node IDs stay contiguous. Without this the
+// solver gets isolated copper islands and CHOLMOD hits an indefinite
+// matrix.
+void prune_disconnected(IrMesh& mesh) {
+    const int N = static_cast<int>(mesh.nodes.size());
+    if (N == 0 || mesh.resistors.empty()) return;
+    // If the mesher had nothing to inject (no source / sink / explicit
+    // currents) there is nothing to prune against -- the user is probably
+    // just inspecting the mesh structure. Skip silently.
+    if (mesh.source_node_ids.empty() && mesh.sink_node_ids.empty() &&
+        mesh.node_currents.empty()) {
+        return;
+    }
+
+    // Union-find over the resistor graph.
+    std::vector<int> parent(N);
+    std::iota(parent.begin(), parent.end(), 0);
+    auto find_root = [&](int x) {
+        while (parent[x] != x) {
+            parent[x] = parent[parent[x]];
+            x = parent[x];
+        }
+        return x;
+    };
+    auto unite = [&](int a, int b) {
+        const int ra = find_root(a);
+        const int rb = find_root(b);
+        if (ra != rb) parent[ra] = rb;
+    };
+    for (const auto& r : mesh.resistors) {
+        if (r.from_node < 0 || r.from_node >= N) continue;
+        if (r.to_node   < 0 || r.to_node   >= N) continue;
+        unite(r.from_node, r.to_node);
+    }
+
+    // Which components contain at least one source / sink?
+    std::set<int> source_components;
+    std::set<int> sink_components;
+    auto note_source = [&](int id) {
+        if (id >= 0 && id < N) source_components.insert(find_root(id));
+    };
+    auto note_sink = [&](int id) {
+        if (id >= 0 && id < N) sink_components.insert(find_root(id));
+    };
+    for (int id : mesh.source_node_ids) note_source(id);
+    for (int id : mesh.sink_node_ids)   note_sink(id);
+    for (const auto& [id, cur] : mesh.node_currents) {
+        if (cur > 0.0) note_source(id);
+        else if (cur < 0.0) note_sink(id);
+    }
+
+    // Components with both. Keep nodes whose root is in this set.
+    std::set<int> valid;
+    std::set_intersection(source_components.begin(), source_components.end(),
+                          sink_components.begin(),  sink_components.end(),
+                          std::inserter(valid, valid.begin()));
+    if (valid.empty()) {
+        // Nothing solvable -- clear everything.
+        mesh.nodes.clear();
+        mesh.resistors.clear();
+        mesh.source_node_ids.clear();
+        mesh.sink_node_ids.clear();
+        mesh.node_currents.clear();
+        return;
+    }
+
+    // Renumber survivors densely.
+    std::vector<int> old_to_new(N, -1);
+    std::vector<Node> new_nodes;
+    new_nodes.reserve(N);
+    for (int i = 0; i < N; ++i) {
+        if (!valid.count(find_root(i))) continue;
+        const int new_id = static_cast<int>(new_nodes.size());
+        old_to_new[i] = new_id;
+        Node nn = mesh.nodes[i];
+        nn.id = new_id;
+        new_nodes.push_back(nn);
+    }
+    mesh.nodes = std::move(new_nodes);
+
+    std::vector<Resistor> new_resistors;
+    new_resistors.reserve(mesh.resistors.size());
+    for (const auto& r : mesh.resistors) {
+        if (r.from_node < 0 || r.from_node >= N) continue;
+        if (r.to_node   < 0 || r.to_node   >= N) continue;
+        const int a = old_to_new[r.from_node];
+        const int b = old_to_new[r.to_node];
+        if (a < 0 || b < 0) continue;
+        new_resistors.push_back({a, b, r.conductance});
+    }
+    mesh.resistors = std::move(new_resistors);
+
+    auto remap_list = [&](std::vector<int>& v) {
+        std::vector<int> out;
+        out.reserve(v.size());
+        for (int id : v) {
+            if (id >= 0 && id < N && old_to_new[id] >= 0) {
+                out.push_back(old_to_new[id]);
+            }
+        }
+        v = std::move(out);
+    };
+    remap_list(mesh.source_node_ids);
+    remap_list(mesh.sink_node_ids);
+
+    std::vector<std::pair<int, double>> new_currents;
+    new_currents.reserve(mesh.node_currents.size());
+    for (const auto& [id, cur] : mesh.node_currents) {
+        if (id >= 0 && id < N && old_to_new[id] >= 0) {
+            new_currents.emplace_back(old_to_new[id], cur);
+        }
+    }
+    mesh.node_currents = std::move(new_currents);
 }
 
 // Nearest node on a specific layer to a world point, or -1 if none.
@@ -320,6 +438,7 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
         }
     }
 
+    prune_disconnected(mesh);
     return mesh;
 }
 

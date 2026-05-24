@@ -285,3 +285,66 @@ TEST_CASE("mesher: extra_layer_ordinals duplicate of primary is harmless", "[irm
     auto m = IrMesher::build(b, cfg);
     REQUIRE(m.nodes.size() == 100);  // not 400
 }
+
+TEST_CASE("mesher: prune drops disconnected component without source/sink", "[irmesh][connectivity]") {
+    // Two square zones, same net+layer but spatially separated so the mesher
+    // builds them as disconnected components. Pads only on the LEFT square.
+    Board b;
+    b.stackup.layers.push_back({0, "F.Cu", "signal"});
+    b.nets.push_back({1, "VRAIL"});
+
+    Zone z1; z1.net_id = 1; z1.layer_ordinal = 0;
+    Polygon p1; p1.outline = {{0, 0}, {0.010, 0}, {0.010, 0.010}, {0, 0.010}};
+    z1.filled.push_back(p1); b.zones.push_back(z1);
+
+    Zone z2; z2.net_id = 1; z2.layer_ordinal = 0;
+    Polygon p2; p2.outline = {{0.030, 0}, {0.040, 0}, {0.040, 0.010}, {0.030, 0.010}};
+    z2.filled.push_back(p2); b.zones.push_back(z2);
+
+    Pad pa; pa.at = {0.001, 0.005}; pa.net_id = 1; pa.layer_ordinals = {0}; pa.name = "A";
+    Pad pb; pb.at = {0.009, 0.005}; pb.net_id = 1; pb.layer_ordinals = {0}; pb.name = "B";
+    b.pads.push_back(pa); b.pads.push_back(pb);
+
+    MeshConfig cfg;
+    cfg.cell_size = 1.0e-3;
+    cfg.net_id = 1;
+    cfg.layer_ordinal = 0;
+    cfg.source_pad_names = {"A"};
+    cfg.sink_pad_names   = {"B"};
+
+    auto m = IrMesher::build(b, cfg);
+    // Left square is 10x10mm at 1mm cells -> 100 cells. Right square would
+    // have been another 100 but lacks source/sink and is pruned.
+    REQUIRE(m.nodes.size() == 100);
+}
+
+TEST_CASE("mesher: prune kills everything if source + sink are on different islands", "[irmesh][connectivity]") {
+    Board b;
+    b.stackup.layers.push_back({0, "F.Cu", "signal"});
+    b.nets.push_back({1, "VRAIL"});
+
+    Zone z1; z1.net_id = 1; z1.layer_ordinal = 0;
+    Polygon p1; p1.outline = {{0, 0}, {0.010, 0}, {0.010, 0.010}, {0, 0.010}};
+    z1.filled.push_back(p1); b.zones.push_back(z1);
+
+    Zone z2; z2.net_id = 1; z2.layer_ordinal = 0;
+    Polygon p2; p2.outline = {{0.030, 0}, {0.040, 0}, {0.040, 0.010}, {0.030, 0.010}};
+    z2.filled.push_back(p2); b.zones.push_back(z2);
+
+    Pad pa; pa.at = {0.005, 0.005}; pa.net_id = 1; pa.layer_ordinals = {0}; pa.name = "A";
+    Pad pb; pb.at = {0.035, 0.005}; pb.net_id = 1; pb.layer_ordinals = {0}; pb.name = "B";
+    b.pads.push_back(pa); b.pads.push_back(pb);
+
+    MeshConfig cfg;
+    cfg.cell_size = 1.0e-3;
+    cfg.net_id = 1;
+    cfg.layer_ordinal = 0;
+    cfg.source_pad_names = {"A"};
+    cfg.sink_pad_names   = {"B"};
+
+    auto m = IrMesher::build(b, cfg);
+    // No component contains BOTH a source and sink, so the prune drops
+    // everything. Caller (Analyze) gets a clean 'mesher produced no nodes'
+    // instead of the prior CHOLMOD: matrix not positive definite.
+    REQUIRE(m.nodes.empty());
+}
