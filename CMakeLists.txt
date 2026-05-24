@@ -46,6 +46,7 @@ add_library(pdnkit_core STATIC
     src/pi/IrMesher.cpp
     src/pi/IrSolver.cpp
     src/pi/CavityModel.cpp
+    src/pi/DecapOptimizer.cpp
     src/render/Camera2D.cpp
     src/render/ZoneMesher.cpp
     src/render/IrResultMesh.cpp

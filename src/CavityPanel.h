@@ -37,6 +37,7 @@ private slots:
     void onSaveCsv();
     void onAddDecap();
     void onRemoveDecap();
+    void onAutoSuggest();
 
 private:
     void rebuildNetCombo();
@@ -60,6 +61,7 @@ private:
     QPushButton* save_btn_;
     QPushButton* add_decap_btn_;
     QPushButton* remove_decap_btn_;
+    QPushButton* auto_decap_btn_;
     QTableWidget* decap_table_;
     ZfPlotWidget* plot_;
 

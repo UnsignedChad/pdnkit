@@ -25,6 +25,7 @@
 
 #include "ZfPlotWidget.h"
 #include "pi/CavityModel.h"
+#include "pi/DecapOptimizer.h"
 
 namespace {
 
@@ -171,8 +172,13 @@ CavityPanel::CavityPanel(QWidget* parent) : QWidget(parent) {
     auto* dec_btn_row = new QHBoxLayout();
     add_decap_btn_    = new QPushButton("Add decap");
     remove_decap_btn_ = new QPushButton("Remove selected");
+    auto_decap_btn_   = new QPushButton("Auto-suggest");
+    auto_decap_btn_->setToolTip(
+        "Greedy decap selection from a small library. Adds capacitors near "
+        "port 1 until the target impedance is met or the cap budget is hit.");
     dec_btn_row->addWidget(add_decap_btn_);
     dec_btn_row->addWidget(remove_decap_btn_);
+    dec_btn_row->addWidget(auto_decap_btn_);
     outer->addLayout(dec_btn_row);
 
     auto* btn_row = new QHBoxLayout();
@@ -192,6 +198,7 @@ CavityPanel::CavityPanel(QWidget* parent) : QWidget(parent) {
     connect(clear_btn_, &QPushButton::clicked, this, &CavityPanel::onClear);
     connect(add_decap_btn_,    &QPushButton::clicked, this, &CavityPanel::onAddDecap);
     connect(remove_decap_btn_, &QPushButton::clicked, this, &CavityPanel::onRemoveDecap);
+    connect(auto_decap_btn_,   &QPushButton::clicked, this, &CavityPanel::onAutoSuggest);
     connect(decap_table_, &QTableWidget::itemChanged, this, [this](QTableWidgetItem*) {
         emit decapsChanged(read_decap_positions(decap_table_, 0.0, 0.0));
     });
@@ -360,4 +367,63 @@ void CavityPanel::onClear() {
     last_freqs_.clear();
     last_mags_.clear();
     plot_->clear();
+}
+
+void CavityPanel::onAutoSuggest() {
+    if (!board_ || net_combo_->count() == 0) {
+        QMessageBox::information(this, "Auto-suggest decaps",
+            "Load a board and pick a net first.");
+        return;
+    }
+    const int net = net_combo_->currentData().toInt();
+    constexpr int kPrimaryLayer = 0;
+    const Bbox bb = zone_bbox(*board_, net, kPrimaryLayer);
+    if (!bb.ok) {
+        QMessageBox::warning(this, "Auto-suggest decaps",
+            "No filled zones for the selected net on F.Cu.");
+        return;
+    }
+
+    pdnkit::pi::CavityConfig cfg;
+    cfg.a = bb.hi_x - bb.lo_x;
+    cfg.b = bb.hi_y - bb.lo_y;
+    cfg.d = thickness_spin_->value() * 1.0e-3;
+    cfg.eps_r = eps_r_spin_->value();
+    cfg.tan_delta = tan_delta_spin_->value();
+    cfg.max_modes = modes_spin_->value();
+
+    pdnkit::pi::DecapOptimizerConfig opt;
+    opt.target_z = target_z_spin_->value();
+    opt.f_min = f_min_spin_->value();
+    opt.f_max = f_max_spin_->value();
+    opt.n_points = std::min(points_spin_->value(), 80);  // cap for search speed
+    opt.max_caps = 30;
+    opt.cap_x = port1_x_->value() * 1.0e-3;
+    opt.cap_y = port1_y_->value() * 1.0e-3;
+
+    auto result = pdnkit::pi::optimize_decaps(
+        cfg, port1_x_->value() * 1.0e-3, port1_y_->value() * 1.0e-3, opt);
+
+    // Replace the table with the suggested decaps.
+    decap_table_->setRowCount(0);
+    for (const auto& d : result.decaps) {
+        const int row = decap_table_->rowCount();
+        decap_table_->insertRow(row);
+        decap_table_->setItem(row, 0, new QTableWidgetItem(QString::number(d.x * 1e3, 'f', 2)));
+        decap_table_->setItem(row, 1, new QTableWidgetItem(QString::number(d.y * 1e3, 'f', 2)));
+        decap_table_->setItem(row, 2, new QTableWidgetItem(QString::number(d.C * 1e6, 'g', 4)));
+        decap_table_->setItem(row, 3, new QTableWidgetItem(QString::number(d.esr * 1e3, 'f', 1)));
+        decap_table_->setItem(row, 4, new QTableWidgetItem(QString::number(d.esl * 1e9, 'f', 2)));
+    }
+    emit decapsChanged(read_decap_positions(decap_table_, 0.0, 0.0));
+
+    const QString msg = QString(
+        "Suggested %1 decap%2.  Final max |Z| over sweep: %3 mOhm.  "
+        "Target %4 mOhm: %5")
+        .arg(result.decaps.size())
+        .arg(result.decaps.size() == 1 ? "" : "s")
+        .arg(result.final_max_z * 1000.0, 0, 'f', 3)
+        .arg(opt.target_z * 1000.0, 0, 'f', 3)
+        .arg(result.target_met ? "met" : "NOT met (cap budget exhausted)");
+    QMessageBox::information(this, "Auto-suggest decaps", msg);
 }
