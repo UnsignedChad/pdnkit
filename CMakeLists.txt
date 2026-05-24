@@ -29,6 +29,7 @@ add_library(pdnkit_core STATIC
     src/sexpr/SExpr.cpp
     src/parser/KicadPcbParser.cpp
     src/model/HitTest.cpp
+    src/pi/IrMesher.cpp
     src/render/Camera2D.cpp
     src/render/ZoneMesher.cpp
     src/render/SegmentMesher.cpp
