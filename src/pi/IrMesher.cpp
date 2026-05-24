@@ -506,7 +506,12 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
         }
     }
 
-    if (mesh.nodes.empty()) return mesh;
+    // Do not early-return when the zone mesh is empty; the track-based
+    // fallback at the end may still produce a usable network. Skip just
+    // the via-wiring + pad-attachment block instead.
+    const bool zone_mesh_empty = mesh.nodes.empty();
+
+    if (!zone_mesh_empty) {
 
     // Via wiring: for each via on the target net whose from/to layers are
     // both in our meshed set, add a via-resistor between nearest nodes on
@@ -634,6 +639,8 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
             for (int nid : pad_nodes(*snk)) mesh.sink_node_ids.push_back(nid);
         }
     }
+
+    }  // end of if (!zone_mesh_empty) {
 
     if (!mesh.nodes.empty()) mesh.primary_layer_used = primary_layer;
 

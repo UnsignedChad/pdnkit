@@ -418,3 +418,80 @@ TEST_CASE("mesher: auto_select_layer is a no-op when primary layer already has c
     auto m = IrMesher::build(b, cfg);
     REQUIRE(m.primary_layer_used == 0);  // stayed on F.Cu
 }
+
+TEST_CASE("track-mesher: 2-segment trace builds 3 nodes, 2 resistors", "[irmesh][track]") {
+    // No zones; only segments. Mesher should fall back to track-based 1D.
+    Board b;
+    b.stackup.layers.push_back({0, "F.Cu", "signal"});
+    b.nets.push_back({1, "VRAIL"});
+
+    Segment s1; s1.start = {0, 0}; s1.end = {0.005, 0}; s1.width = 0.001; s1.layer_ordinal = 0; s1.net_id = 1;
+    Segment s2; s2.start = {0.005, 0}; s2.end = {0.010, 0}; s2.width = 0.001; s2.layer_ordinal = 0; s2.net_id = 1;
+    b.segments.push_back(s1); b.segments.push_back(s2);
+
+    Pad pa; pa.at = {0, 0};       pa.net_id = 1; pa.layer_ordinals = {0}; pa.name = "A";
+    Pad pb; pb.at = {0.010, 0};   pb.net_id = 1; pb.layer_ordinals = {0}; pb.name = "B";
+    b.pads.push_back(pa); b.pads.push_back(pb);
+
+    MeshConfig cfg;
+    cfg.net_id = 1;
+    cfg.layer_ordinal = 0;
+
+    auto m = IrMesher::build(b, cfg);
+    INFO("nodes=" << m.nodes.size() << " resistors=" << m.resistors.size() << " src=" << m.source_node_ids.size() << " snk=" << m.sink_node_ids.size());
+    REQUIRE(m.nodes.size() == 3);     // endpoints (0,0), (5mm,0), (10mm,0)
+    REQUIRE(m.resistors.size() == 2);
+    REQUIRE_FALSE(m.source_node_ids.empty());
+    REQUIRE_FALSE(m.sink_node_ids.empty());
+}
+
+TEST_CASE("track-mesher: T-junction merges 3 segments at one node", "[irmesh][track]") {
+    Board b;
+    b.stackup.layers.push_back({0, "F.Cu", "signal"});
+    b.nets.push_back({1, "VRAIL"});
+
+    // Three segments meeting at (0,0): N, S, E.
+    Segment s1; s1.start = {0, 0}; s1.end = {0,  0.005}; s1.width = 0.001; s1.layer_ordinal = 0; s1.net_id = 1;
+    Segment s2; s2.start = {0, 0}; s2.end = {0, -0.005}; s2.width = 0.001; s2.layer_ordinal = 0; s2.net_id = 1;
+    Segment s3; s3.start = {0, 0}; s3.end = {0.005, 0}; s3.width = 0.001; s3.layer_ordinal = 0; s3.net_id = 1;
+    b.segments.push_back(s1); b.segments.push_back(s2); b.segments.push_back(s3);
+
+    Pad pa; pa.at = {0, 0.005};  pa.net_id = 1; pa.layer_ordinals = {0}; pa.name = "A";
+    Pad pb; pb.at = {0.005, 0};  pb.net_id = 1; pb.layer_ordinals = {0}; pb.name = "B";
+    b.pads.push_back(pa); b.pads.push_back(pb);
+
+    MeshConfig cfg;
+    cfg.net_id = 1;
+    cfg.layer_ordinal = 0;
+
+    auto m = IrMesher::build(b, cfg);
+    // 4 distinct endpoints (junction + 3 ends). All 3 segments share the
+    // (0,0) junction so connectivity is preserved.
+    REQUIRE(m.nodes.size() == 4);
+    REQUIRE(m.resistors.size() == 3);
+}
+
+TEST_CASE("track-mesher: pad far from any track endpoint is ignored", "[irmesh][track]") {
+    Board b;
+    b.stackup.layers.push_back({0, "F.Cu", "signal"});
+    b.nets.push_back({1, "VRAIL"});
+
+    Segment s1; s1.start = {0, 0}; s1.end = {0.005, 0}; s1.width = 0.001; s1.layer_ordinal = 0; s1.net_id = 1;
+    b.segments.push_back(s1);
+
+    // Pads far from any track endpoint (>1mm tolerance).
+    Pad pa; pa.at = {0.050, 0.050}; pa.net_id = 1; pa.layer_ordinals = {0}; pa.name = "FAR";
+    Pad pb; pb.at = {0.080, 0.080}; pb.net_id = 1; pb.layer_ordinals = {0}; pb.name = "ALSO_FAR";
+    b.pads.push_back(pa); b.pads.push_back(pb);
+
+    MeshConfig cfg;
+    cfg.net_id = 1;
+    cfg.layer_ordinal = 0;
+
+    auto m = IrMesher::build(b, cfg);
+    // The far pads do not attach -- source/sink lists stay empty. The
+    // connectivity prune is a no-op without source/sink, so the segment
+    // nodes survive but with no injection point the user just cant solve.
+    REQUIRE(m.source_node_ids.empty());
+    REQUIRE(m.sink_node_ids.empty());
+}
