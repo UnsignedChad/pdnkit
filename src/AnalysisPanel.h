@@ -28,6 +28,7 @@ public:
 
 signals:
     void runRequested();
+    void netChanged(int net_id);
     void clearRequested();
 
 private slots:

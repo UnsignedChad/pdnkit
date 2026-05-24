@@ -66,6 +66,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     addDockWidget(Qt::RightDockWidgetArea, an_dock);
     connect(analysis_panel_, &AnalysisPanel::runRequested,
             this, &MainWindow::onAnalyzeStaticIrDrop);
+    connect(analysis_panel_, &AnalysisPanel::netChanged, this,
+            [this](int net_id) {
+                if (current_board_path_.isEmpty()) return;
+                QSettings settings("pdnkit", "pdnkit");
+                const QString key = QString("board/%1/analysis/net")
+                    .arg(current_board_path_);
+                settings.setValue(key, net_id);
+            });
     connect(analysis_panel_, &AnalysisPanel::clearRequested,
             canvas_, [this]() { canvas_->setIrResult({}); legend_->setRange(0, 0); });
 
@@ -319,6 +327,14 @@ bool MainWindow::loadKicadPcb(const QString& path) {
         netstats_panel_->setBoard(board_.get());
         cavity_panel_->setBoard(board_.get());
         transient_panel_->setBoard(board_.get());
+
+        // Restore per-board last-selected net for the Analysis panel.
+        QSettings settings("pdnkit", "pdnkit");
+        const QString key = QString("board/%1/analysis/net").arg(path);
+        if (settings.contains(key)) {
+            const int net_id = settings.value(key).toInt();
+            analysis_panel_->setNetById(net_id);
+        }
 
         spdlog::info("loaded {}: {} layers ({} copper), {} nets, {} segments, "
                      "{} vias, {} pads, {} zones",

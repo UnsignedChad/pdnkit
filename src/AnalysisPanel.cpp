@@ -105,7 +105,11 @@ AnalysisPanel::AnalysisPanel(QWidget* parent) : QWidget(parent) {
     outer->addLayout(btn_row);
 
     connect(net_combo_,   QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &AnalysisPanel::onNetOrLayerChanged);
+            this, [this](int){
+                onNetOrLayerChanged();
+                if (net_combo_->count() > 0)
+                    emit netChanged(net_combo_->currentData().toInt());
+            });
     connect(layer_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &AnalysisPanel::onNetOrLayerChanged);
     connect(pad_table_, &QTableWidget::cellChanged, this,
