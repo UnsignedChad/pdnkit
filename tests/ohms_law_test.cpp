@@ -145,13 +145,12 @@ TEST_CASE("ohms-law: result tightens as cell size shrinks", "[ohms][validation]"
     REQUIRE(v_fine   >= 0.5 * r_ideal);
     REQUIRE(v_fine   <= 1.5 * r_ideal);
 
-    // Both grid sizes should give a finite, sensible value -- we deliberately
-    // do not assert that the finer mesh is CLOSER to the analytical R_ideal.
-    // Point-source spreading resistance on a 2D sheet diverges as the contact
-    // shrinks (well-known result for the continuous Greens function of the
-    // 2D Laplace equation), so refining the mesh increases the additional
-    // spreading term. Edge-contact source/sink support is a follow-up; once
-    // we have that, we can sharpen this to a strict-convergence assertion.
-    REQUIRE(v_fine > v_coarse * 0.9);
-    REQUIRE(v_fine < v_coarse * 2.0);
+    // With edge-contact source/sink (gap #3) the mesh converges TOWARD the
+    // analytical R_ideal as cells shrink. Finer mesh must be at least as
+    // close to ideal as the coarse mesh.
+    const double err_coarse = std::abs(v_coarse - r_ideal);
+    const double err_fine   = std::abs(v_fine   - r_ideal);
+    REQUIRE(err_fine <= err_coarse);
+    // And the 0.25mm result must hit within 5%.
+    REQUIRE(err_fine / r_ideal < 0.05);
 }

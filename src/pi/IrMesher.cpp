@@ -170,6 +170,43 @@ LayerSubmesh mesh_one_layer(const model::Board& board, const MeshConfig& cfg,
     return sm;
 }
 
+// Every mesh node whose cell center falls inside the pad footprint on the
+// given layer. Used to spread source/sink current across an edge contact
+// rather than a single point -- on a 2D sheet, point-load spreading
+// resistance diverges as the contact shrinks, so a pad bigger than the
+// mesh cell deserves a multi-node attachment.
+std::vector<int> nodes_under_pad(const IrMesh& mesh, const model::Pad& pad,
+                                  int layer) {
+    std::vector<int> out;
+    const bool radial = (pad.shape == model::PadShape::Circle) ||
+                        (pad.size.x <= 0.0 || pad.size.y <= 0.0);
+    if (radial) {
+        const double r = (pad.size.x > 0.0) ? 0.5 * pad.size.x : 0.0;
+        if (r <= 0.0) return out;
+        const double r2 = r * r;
+        for (const auto& n : mesh.nodes) {
+            if (n.layer_ordinal != layer) continue;
+            const double dx = n.x - pad.at.x;
+            const double dy = n.y - pad.at.y;
+            if (dx * dx + dy * dy <= r2) out.push_back(n.id);
+        }
+        return out;
+    }
+    const double hw = 0.5 * pad.size.x;
+    const double hh = 0.5 * pad.size.y;
+    const double cs = std::cos(-pad.rotation);
+    const double sn = std::sin(-pad.rotation);
+    for (const auto& n : mesh.nodes) {
+        if (n.layer_ordinal != layer) continue;
+        const double dx = n.x - pad.at.x;
+        const double dy = n.y - pad.at.y;
+        const double lx = cs * dx - sn * dy;
+        const double ly = sn * dx + cs * dy;
+        if (std::abs(lx) <= hw && std::abs(ly) <= hh) out.push_back(n.id);
+    }
+    return out;
+}
+
 // Drop nodes in components that lack BOTH a source AND a sink, then
 // renumber the survivors so node IDs stay contiguous. Without this the
 // solver gets isolated copper islands and CHOLMOD hits an indefinite
@@ -435,37 +472,51 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
         return false;
     };
 
+    // Resolve a pad to the set of node IDs it attaches to. Edge-contact:
+    // every mesh node inside the pad footprint receives an equal share of
+    // the pad's current. Falls back to nearest_node when the pad is smaller
+    // than the cell or covers no cells at all.
+    auto pad_nodes = [&](const model::Pad& pad) -> std::vector<int> {
+        auto nodes = nodes_under_pad(mesh, pad, primary_layer);
+        if (!nodes.empty()) return nodes;
+        const int nid = nearest_node(pad.at.x, pad.at.y);
+        if (nid >= 0) return {nid};
+        return {};
+    };
+
     const bool explicit_src = !cfg.source_pad_names.empty();
     const bool explicit_snk = !cfg.sink_pad_names.empty();
 
     if (explicit_src || explicit_snk) {
-        // Use explicit pad lists.
         for (const auto& pad : board.pads) {
             if (!pad_on_target(pad)) continue;
-            const int nid = nearest_node(pad.at.x, pad.at.y);
-            if (nid < 0) continue;
+            auto nodes = pad_nodes(pad);
+            if (nodes.empty()) continue;
             if (explicit_src && name_in(cfg.source_pad_names, pad.name)) {
-                mesh.source_node_ids.push_back(nid);
+                for (int nid : nodes) mesh.source_node_ids.push_back(nid);
             }
             if (explicit_snk && name_in(cfg.sink_pad_names, pad.name)) {
-                mesh.sink_node_ids.push_back(nid);
+                for (int nid : nodes) mesh.sink_node_ids.push_back(nid);
             }
         }
     }
 
-    // If per-pad currents are specified, map them to nodes via nearest-node.
-    // This takes priority over source/sink lists in the solver.
+    // If per-pad currents are specified, distribute each pad's current
+    // equally across the nodes it covers (edge-contact).
     if (!cfg.pad_currents.empty()) {
         for (const auto& pad : board.pads) {
             if (!pad_on_target(pad)) continue;
             auto it = cfg.pad_currents.find(pad.name);
             if (it == cfg.pad_currents.end()) continue;
-            const int nid = nearest_node(pad.at.x, pad.at.y);
-            if (nid >= 0) mesh.node_currents.emplace_back(nid, it->second);
+            auto nodes = pad_nodes(pad);
+            if (nodes.empty()) continue;
+            const double per_node = it->second / static_cast<double>(nodes.size());
+            for (int nid : nodes) mesh.node_currents.emplace_back(nid, per_node);
         }
     }
 
-    // Auto-fill anything still missing with leftmost / rightmost pad.
+    // Auto-fill anything still missing with leftmost / rightmost pad
+    // (edge-contact node lists).
     if (mesh.source_node_ids.empty() || mesh.sink_node_ids.empty()) {
         const model::Pad* src = nullptr;
         const model::Pad* snk = nullptr;
@@ -475,12 +526,10 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
             if (!snk || pad.at.x > snk->at.x) snk = &pad;
         }
         if (mesh.source_node_ids.empty() && src && !mesh.nodes.empty()) {
-            const int nid = nearest_node(src->at.x, src->at.y);
-            if (nid >= 0) mesh.source_node_ids.push_back(nid);
+            for (int nid : pad_nodes(*src)) mesh.source_node_ids.push_back(nid);
         }
         if (mesh.sink_node_ids.empty() && snk && snk != src && !mesh.nodes.empty()) {
-            const int nid = nearest_node(snk->at.x, snk->at.y);
-            if (nid >= 0) mesh.sink_node_ids.push_back(nid);
+            for (int nid : pad_nodes(*snk)) mesh.sink_node_ids.push_back(nid);
         }
     }
 
