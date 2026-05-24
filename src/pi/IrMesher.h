@@ -28,7 +28,11 @@ struct MeshConfig {
     double copper_thickness = 35.0e-6;  // 1 oz copper (35 µm)
     double copper_rho = 1.68e-8;        // copper resistivity Ω·m at 20°C
     int net_id = 0;                     // target net (e.g., a power rail)
-    int layer_ordinal = 0;              // target copper layer
+    int layer_ordinal = 0;              // primary copper layer
+    // Additional copper layers to include in the mesh. Vias on the target
+    // net that connect any pair of meshed layers add a via-resistor
+    // (R = rho * board_thickness / cross_section). Empty == single-layer.
+    std::vector<int> extra_layer_ordinals;
 
     // Optional explicit source/sink pad selection by pad name. When non-empty,
     // these override the v0 leftmost/rightmost auto-pick. Pads must match
@@ -47,8 +51,9 @@ struct Node {
     int id = 0;
     double x = 0.0;
     double y = 0.0;
-    int grid_i = 0;  // column in the source grid
-    int grid_j = 0;  // row in the source grid
+    int grid_i = 0;        // column in this layer's grid
+    int grid_j = 0;        // row in this layer's grid
+    int layer_ordinal = 0; // which copper layer this node sits on
 };
 
 struct Resistor {

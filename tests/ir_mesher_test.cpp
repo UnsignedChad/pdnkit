@@ -223,3 +223,65 @@ TEST_CASE("mesher: explicit pad_currents populate node_currents", "[irmesh]") {
     for (auto& [_, c] : m.node_currents) sum += c;
     REQUIRE(sum == Approx(0.0).margin(1e-9));
 }
+
+TEST_CASE("mesher: multi-layer meshes both layers and wires via resistors", "[irmesh]") {
+    Board b;
+    b.stackup.total_thickness = 1.6e-3;
+    b.stackup.layers.push_back({0,  "F.Cu", "signal"});
+    b.stackup.layers.push_back({31, "B.Cu", "signal"});
+    b.nets.push_back({1, "GND"});
+
+    // Same square zone on both layers.
+    for (int ord : {0, 31}) {
+        Zone z;
+        z.net_id = 1;
+        z.layer_ordinal = ord;
+        Polygon p;
+        p.outline = {{0, 0}, {0.010, 0}, {0.010, 0.010}, {0, 0.010}};
+        z.filled.push_back(p);
+        b.zones.push_back(z);
+    }
+
+    // One through-via on GND connecting the two layers.
+    Via v;
+    v.at = {0.005, 0.005};
+    v.outer_diameter = 0.8e-3;
+    v.drill = 0.4e-3;
+    v.from_layer = 0;
+    v.to_layer = 31;
+    v.net_id = 1;
+    b.vias.push_back(v);
+
+    MeshConfig cfg;
+    cfg.cell_size = 1.0e-3;
+    cfg.net_id = 1;
+    cfg.layer_ordinal = 0;
+    cfg.extra_layer_ordinals = {31};
+
+    auto m = IrMesher::build(b, cfg);
+    REQUIRE(m.nodes.size() == 200);  // 100 per layer
+
+    // Each layer has 180 sheet resistors. Plus one via resistor.
+    REQUIRE(m.resistors.size() == 180 + 180 + 1);
+
+    // Nodes carry their layer ordinal.
+    int f_count = 0, b_count = 0;
+    for (const auto& n : m.nodes) {
+        if (n.layer_ordinal == 0) ++f_count;
+        if (n.layer_ordinal == 31) ++b_count;
+    }
+    REQUIRE(f_count == 100);
+    REQUIRE(b_count == 100);
+}
+
+TEST_CASE("mesher: extra_layer_ordinals duplicate of primary is harmless", "[irmesh]") {
+    Board b = with_square_zone(1, 0, 0.010);
+    MeshConfig cfg;
+    cfg.cell_size = 1.0e-3;
+    cfg.net_id = 1;
+    cfg.layer_ordinal = 0;
+    cfg.extra_layer_ordinals = {0, 0, 0};  // duplicates of primary
+
+    auto m = IrMesher::build(b, cfg);
+    REQUIRE(m.nodes.size() == 100);  // not 400
+}

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numbers>
 #include <vector>
 
 namespace pdnkit::pi {
@@ -74,45 +75,43 @@ bool target_bbox(const model::Board& board, int net, int layer,
 
 }  // namespace
 
-IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
-    IrMesh mesh;
-    if (cfg.cell_size <= 0.0 || cfg.copper_thickness <= 0.0 ||
-        cfg.copper_rho <= 0.0) {
-        return mesh;
-    }
+namespace {
+
+// Mesh one copper layer for the target net. Appends nodes to `mesh.nodes`,
+// adds sheet-conductance resistors, and returns a (cell -> node id) table
+// along with the grid layout for later via-wiring lookups.
+struct LayerSubmesh {
+    int layer_ordinal = 0;
+    std::vector<int> cell_to_node;  // size nx*ny, -1 if outside copper
+    int nx = 0;
+    int ny = 0;
+    double lo_x = 0.0, lo_y = 0.0;
+    double cell_size = 0.0;
+};
+
+LayerSubmesh mesh_one_layer(const model::Board& board, const MeshConfig& cfg,
+                             int layer_ord, IrMesh& mesh, double g_per_square) {
+    LayerSubmesh sm;
+    sm.layer_ordinal = layer_ord;
+    sm.cell_size = cfg.cell_size;
 
     double lo_x = 0, lo_y = 0, hi_x = 0, hi_y = 0;
-    if (!target_bbox(board, cfg.net_id, cfg.layer_ordinal, lo_x, lo_y, hi_x,
-                     hi_y)) {
-        return mesh;
+    if (!target_bbox(board, cfg.net_id, layer_ord, lo_x, lo_y, hi_x, hi_y)) {
+        return sm;
     }
+    sm.lo_x = lo_x;
+    sm.lo_y = lo_y;
+    sm.nx = std::max(1, static_cast<int>((hi_x - lo_x) / cfg.cell_size));
+    sm.ny = std::max(1, static_cast<int>((hi_y - lo_y) / cfg.cell_size));
+    sm.cell_to_node.assign(static_cast<std::size_t>(sm.nx) * sm.ny, -1);
 
-    // bbox is the polygon bbox; cell centers fall strictly inside it at
-    // lo + (i + 0.5) * cell_size. Floor on the count: a fractional cell at the
-    // boundary is ignored (its center would be outside the bbox and likely
-    // outside the polygon). Acceptable since sheet resistance scales with
-    // missing area proportionally for PI purposes.
-    mesh.bbox_lo_x = lo_x;
-    mesh.bbox_lo_y = lo_y;
-    mesh.bbox_hi_x = hi_x;
-    mesh.bbox_hi_y = hi_y;
+    auto cell_index = [&sm](int i, int j) { return j * sm.nx + i; };
 
-    const int nx = std::max(1, static_cast<int>((hi_x - lo_x) / cfg.cell_size));
-    const int ny = std::max(1, static_cast<int>((hi_y - lo_y) / cfg.cell_size));
-
-    // Cell (i, j) → node id (or -1 if outside copper).
-    std::vector<int> cell_to_node(static_cast<std::size_t>(nx) * ny, -1);
-
-    auto cell_index = [nx](int i, int j) {
-        return j * nx + i;
-    };
-
-    for (int j = 0; j < ny; ++j) {
-        for (int i = 0; i < nx; ++i) {
+    for (int j = 0; j < sm.ny; ++j) {
+        for (int i = 0; i < sm.nx; ++i) {
             const double cx = lo_x + (i + 0.5) * cfg.cell_size;
             const double cy = lo_y + (j + 0.5) * cfg.cell_size;
-            if (!point_in_target_copper(board, cfg.net_id, cfg.layer_ordinal,
-                                        cx, cy)) {
+            if (!point_in_target_copper(board, cfg.net_id, layer_ord, cx, cy)) {
                 continue;
             }
             Node n;
@@ -121,27 +120,122 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
             n.y = cy;
             n.grid_i = i;
             n.grid_j = j;
+            n.layer_ordinal = layer_ord;
             mesh.nodes.push_back(n);
-            cell_to_node[cell_index(i, j)] = n.id;
+            sm.cell_to_node[cell_index(i, j)] = n.id;
+        }
+    }
+    for (int j = 0; j < sm.ny; ++j) {
+        for (int i = 0; i < sm.nx; ++i) {
+            const int a = sm.cell_to_node[cell_index(i, j)];
+            if (a < 0) continue;
+            if (i + 1 < sm.nx) {
+                const int b = sm.cell_to_node[cell_index(i + 1, j)];
+                if (b >= 0) mesh.resistors.push_back({a, b, g_per_square});
+            }
+            if (j + 1 < sm.ny) {
+                const int b = sm.cell_to_node[cell_index(i, j + 1)];
+                if (b >= 0) mesh.resistors.push_back({a, b, g_per_square});
+            }
+        }
+    }
+    return sm;
+}
+
+// Nearest node on a specific layer to a world point, or -1 if none.
+int nearest_node_on_layer(const IrMesh& mesh, double px, double py, int layer) {
+    int best = -1;
+    double best_d2 = std::numeric_limits<double>::infinity();
+    for (const auto& n : mesh.nodes) {
+        if (n.layer_ordinal != layer) continue;
+        const double dx = n.x - px;
+        const double dy = n.y - py;
+        const double d2 = dx * dx + dy * dy;
+        if (d2 < best_d2) {
+            best_d2 = d2;
+            best = n.id;
+        }
+    }
+    return best;
+}
+
+}  // namespace
+
+IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
+    IrMesh mesh;
+    if (cfg.cell_size <= 0.0 || cfg.copper_thickness <= 0.0 ||
+        cfg.copper_rho <= 0.0) {
+        return mesh;
+    }
+
+    // Build the ordered list of layers (primary first, then extras).
+    std::vector<int> layers = {cfg.layer_ordinal};
+    for (int l : cfg.extra_layer_ordinals) {
+        bool seen = false;
+        for (int e : layers) if (e == l) { seen = true; break; }
+        if (!seen) layers.push_back(l);
+    }
+
+    const double g_per_square = cfg.copper_thickness / cfg.copper_rho;
+
+    std::vector<LayerSubmesh> submeshes;
+    for (int layer : layers) {
+        submeshes.push_back(mesh_one_layer(board, cfg, layer, mesh, g_per_square));
+    }
+
+    // Overall bbox = union of per-layer submeshes.
+    bool any_bbox = false;
+    for (const auto& sm : submeshes) {
+        if (sm.nx == 0 || sm.ny == 0) continue;
+        const double hi_x = sm.lo_x + sm.nx * sm.cell_size;
+        const double hi_y = sm.lo_y + sm.ny * sm.cell_size;
+        if (!any_bbox) {
+            mesh.bbox_lo_x = sm.lo_x;
+            mesh.bbox_lo_y = sm.lo_y;
+            mesh.bbox_hi_x = hi_x;
+            mesh.bbox_hi_y = hi_y;
+            any_bbox = true;
+        } else {
+            mesh.bbox_lo_x = std::min(mesh.bbox_lo_x, sm.lo_x);
+            mesh.bbox_lo_y = std::min(mesh.bbox_lo_y, sm.lo_y);
+            mesh.bbox_hi_x = std::max(mesh.bbox_hi_x, hi_x);
+            mesh.bbox_hi_y = std::max(mesh.bbox_hi_y, hi_y);
         }
     }
 
-    // Resistors: connect each in-copper node to its right and down neighbors
-    // (if those neighbors also exist). Sheet-resistance conductance per square:
-    const double g_per_square = cfg.copper_thickness / cfg.copper_rho;
+    if (mesh.nodes.empty()) return mesh;
 
-    for (int j = 0; j < ny; ++j) {
-        for (int i = 0; i < nx; ++i) {
-            const int a = cell_to_node[cell_index(i, j)];
-            if (a < 0) continue;
-            if (i + 1 < nx) {
-                const int b = cell_to_node[cell_index(i + 1, j)];
-                if (b >= 0) mesh.resistors.push_back({a, b, g_per_square});
+    // Via wiring: for each via on the target net whose from/to layers are
+    // both in our meshed set, add a via-resistor between nearest nodes on
+    // each side. Via barrel resistance R = rho * L / A where L is the board
+    // thickness between the two layers (approximated as total_thickness for
+    // through-vias) and A = pi * (drill/2)^2.
+    if (submeshes.size() >= 2) {
+        for (const auto& via : board.vias) {
+            if (via.net_id != cfg.net_id) continue;
+            if (via.drill <= 0.0) continue;
+
+            const LayerSubmesh* from_sm = nullptr;
+            const LayerSubmesh* to_sm = nullptr;
+            for (const auto& sm : submeshes) {
+                if (sm.layer_ordinal == via.from_layer) from_sm = &sm;
+                if (sm.layer_ordinal == via.to_layer)   to_sm   = &sm;
             }
-            if (j + 1 < ny) {
-                const int b = cell_to_node[cell_index(i, j + 1)];
-                if (b >= 0) mesh.resistors.push_back({a, b, g_per_square});
-            }
+            if (!from_sm || !to_sm || from_sm == to_sm) continue;
+
+            const int a = nearest_node_on_layer(mesh, via.at.x, via.at.y,
+                                                from_sm->layer_ordinal);
+            const int b = nearest_node_on_layer(mesh, via.at.x, via.at.y,
+                                                to_sm->layer_ordinal);
+            if (a < 0 || b < 0) continue;
+
+            const double L = board.stackup.total_thickness;
+            const double r = 0.5 * via.drill;
+            const double area = std::numbers::pi * r * r;
+            if (area <= 0.0 || L <= 0.0) continue;
+            const double R = cfg.copper_rho * L / area;
+            const double G = 1.0 / R;
+            mesh.resistors.push_back({a, b, G});
         }
     }
 
