@@ -145,6 +145,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
 
     auto* helpMenu = menuBar()->addMenu("&Help");
+    auto* shortcutsAct = helpMenu->addAction("&Keyboard Shortcuts...");
+    connect(shortcutsAct, &QAction::triggered, this, &MainWindow::onShortcutsDialog);
+    helpMenu->addSeparator();
     auto* aboutAct = helpMenu->addAction("&About pdnkit...");
     connect(aboutAct, &QAction::triggered, this, &MainWindow::onAboutDialog);
 
@@ -451,5 +454,23 @@ void MainWindow::updateRecentMenu() {
         recent_files_.clear();
         updateRecentMenu();
     });
+}
+
+void MainWindow::onShortcutsDialog() {
+    QMessageBox::information(this, "Keyboard shortcuts",
+        "<table cellpadding='4'>"
+        "<tr><th align='left'>File</th><th></th></tr>"
+        "<tr><td><b>Ctrl+O</b></td><td>Open KiCad PCB</td></tr>"
+        "<tr><td><b>Ctrl+R</b></td><td>Reload current board</td></tr>"
+        "<tr><td><b>Ctrl+Shift+S</b></td><td>Save canvas as image</td></tr>"
+        "<tr><th align='left'>View</th><th></th></tr>"
+        "<tr><td><b>Home</b></td><td>Fit camera to board</td></tr>"
+        "<tr><th align='left'>Analyze</th><th></th></tr>"
+        "<tr><td><b>Ctrl+I</b></td><td>Static IR drop on current selection</td></tr>"
+        "<tr><th align='left'>Canvas mouse</th><th></th></tr>"
+        "<tr><td><b>Drag</b></td><td>Pan</td></tr>"
+        "<tr><td><b>Wheel</b></td><td>Zoom toward cursor</td></tr>"
+        "<tr><td><b>Hover</b></td><td>Net + layer (+ voltage if heatmap)</td></tr>"
+        "</table>");
 }
 

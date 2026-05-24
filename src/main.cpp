@@ -14,6 +14,8 @@
 #include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
 
+#include <Eigen/Core>
+
 #include "MainWindow.h"
 #include "parser/KicadPcbParser.h"
 #include "pi/IrMesher.h"
@@ -316,10 +318,27 @@ int main(int argc, char** argv) {
     cli.add_option("--dt-ns", trn_dt_ns, "Transient timestep in nanoseconds (default 10)");
     cli.add_option("--n-steps", trn_steps, "Number of transient timesteps (default 1000)");
 
+    bool show_version = false;
+    cli.add_flag("--version", show_version,
+                 "Print pdnkit version and exit");
+
     try {
         cli.parse(argc, argv);
     } catch (const CLI::ParseError& e) {
         return cli.exit(e);
+    }
+
+    if (show_version) {
+        std::printf("pdnkit 0.0.1\n");
+        std::printf("  Qt %s\n", QT_VERSION_STR);
+        std::printf("  Eigen %d.%d.%d\n",
+                    EIGEN_WORLD_VERSION, EIGEN_MAJOR_VERSION, EIGEN_MINOR_VERSION);
+#ifdef PDNKIT_HAVE_CHOLMOD
+        std::printf("  CHOLMOD: yes (SuiteSparse)\n");
+#else
+        std::printf("  CHOLMOD: no (using Eigen SimplicialLLT fallback)\n");
+#endif
+        return 0;
     }
 
     if (analyze) {

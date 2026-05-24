@@ -37,6 +37,7 @@ private slots:
     void onSaveCanvasImage();
     void onExportResultsCsv();
     void onAboutDialog();
+    void onShortcutsDialog();
 
 private:
     void populateLayerPanel();
