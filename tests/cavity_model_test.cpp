@@ -163,3 +163,110 @@ TEST_CASE("cavity: decap sweep magnitudes finite + non-negative", "[cavity][deca
         REQUIRE(m >= 0.0);
     }
 }
+
+TEST_CASE("cavity: peak frequency matches analytical TM10 within 5%", "[cavity][validation]") {
+    // Rectangular plane, sweep |Z| over a band around f10, locate the peak,
+    // assert it lands within 5% of c / (2 a sqrt(eps_r)). This is a tier-2
+    // physical-correctness anchor (analytical mode-frequency reference).
+    CavityConfig cfg;
+    cfg.a = 0.100;
+    cfg.b = 0.060;
+    cfg.d = 1.6e-3;
+    cfg.eps_r = 4.3;
+    cfg.tan_delta = 0.005;
+    cfg.max_modes = 30;
+
+    const double f10_theory = kC / (2.0 * cfg.a * std::sqrt(cfg.eps_r));
+
+    // Sweep tightly around f10.
+    const double f_lo = 0.6 * f10_theory;
+    const double f_hi = 1.4 * f10_theory;
+    constexpr int N = 401;
+    std::vector<double> freqs;
+    for (int i = 0; i < N; ++i) {
+        freqs.push_back(f_lo + (f_hi - f_lo) * i / (N - 1));
+    }
+    auto mags = pdnkit::pi::cavity_impedance_magnitude_sweep(
+        cfg, 0.0, 0.0, 0.0, 0.0, freqs);
+
+    std::size_t peak_i = 0;
+    for (std::size_t i = 1; i < mags.size(); ++i) {
+        if (mags[i] > mags[peak_i]) peak_i = i;
+    }
+    const double f_peak = freqs[peak_i];
+    INFO("f10_theory = " << f10_theory / 1e6 << " MHz");
+    INFO("f_peak     = " << f_peak     / 1e6 << " MHz");
+    REQUIRE(std::abs(f_peak - f10_theory) / f10_theory < 0.05);
+}
+
+TEST_CASE("cavity: TM01 peak resolves on a non-square plane", "[cavity][validation]") {
+    CavityConfig cfg;
+    cfg.a = 0.100;
+    cfg.b = 0.050;
+    cfg.d = 1.6e-3;
+    cfg.eps_r = 4.3;
+    cfg.tan_delta = 0.005;
+    cfg.max_modes = 40;
+
+    // TM01: peak in the direction perpendicular to the long axis.
+    const double f01_theory = kC / (2.0 * cfg.b * std::sqrt(cfg.eps_r));
+
+    // Excite the TM01 mode by putting the port at mid-x edge-y.
+    const double f_lo = 0.7 * f01_theory;
+    const double f_hi = 1.3 * f01_theory;
+    constexpr int N = 401;
+    std::vector<double> freqs;
+    for (int i = 0; i < N; ++i) {
+        freqs.push_back(f_lo + (f_hi - f_lo) * i / (N - 1));
+    }
+    auto mags = pdnkit::pi::cavity_impedance_magnitude_sweep(
+        cfg, cfg.a / 2.0, 0.0, cfg.a / 2.0, 0.0, freqs);
+
+    std::size_t peak_i = 0;
+    for (std::size_t i = 1; i < mags.size(); ++i) {
+        if (mags[i] > mags[peak_i]) peak_i = i;
+    }
+    const double f_peak = freqs[peak_i];
+    INFO("f01_theory = " << f01_theory / 1e6 << " MHz");
+    INFO("f_peak     = " << f_peak     / 1e6 << " MHz");
+    REQUIRE(std::abs(f_peak - f01_theory) / f01_theory < 0.05);
+}
+
+TEST_CASE("cavity: peak frequency scales 1/sqrt(eps_r)", "[cavity][validation]") {
+    // Same plane geometry, two different dielectrics. Peak frequency should
+    // scale by 1/sqrt(eps_r). This catches numerical bugs that subtly couple
+    // permittivity into the resonance frequency wrong.
+    auto find_peak = [](double eps_r) {
+        CavityConfig cfg;
+        cfg.a = 0.080;
+        cfg.b = 0.080;
+        cfg.d = 1.0e-3;
+        cfg.eps_r = eps_r;
+        cfg.tan_delta = 0.005;
+        cfg.max_modes = 30;
+
+        const double f_theory = kC / (2.0 * cfg.a * std::sqrt(eps_r));
+        const double f_lo = 0.5 * f_theory;
+        const double f_hi = 1.5 * f_theory;
+        constexpr int N = 501;
+        std::vector<double> freqs;
+        for (int i = 0; i < N; ++i) {
+            freqs.push_back(f_lo + (f_hi - f_lo) * i / (N - 1));
+        }
+        auto mags = pdnkit::pi::cavity_impedance_magnitude_sweep(
+            cfg, 0.0, 0.0, 0.0, 0.0, freqs);
+        std::size_t pi_ = 0;
+        for (std::size_t i = 1; i < mags.size(); ++i) {
+            if (mags[i] > mags[pi_]) pi_ = i;
+        }
+        return freqs[pi_];
+    };
+
+    const double f1 = find_peak(2.2);  // PTFE
+    const double f2 = find_peak(4.3);  // FR-4
+    const double ratio = f1 / f2;
+    const double ratio_theory = std::sqrt(4.3) / std::sqrt(2.2);
+    INFO("f(eps=2.2) / f(eps=4.3) = " << ratio
+                                       << "  theory " << ratio_theory);
+    REQUIRE(std::abs(ratio - ratio_theory) / ratio_theory < 0.05);
+}
