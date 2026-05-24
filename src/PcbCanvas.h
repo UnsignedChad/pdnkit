@@ -12,6 +12,7 @@
 
 #include "model/Board.h"
 #include "render/Camera2D.h"
+#include "render/IrResultMesh.h"
 #include "render/SegmentMesher.h"
 
 class PcbCanvas : public QOpenGLWidget, protected QOpenGLFunctions_3_3_Core {
@@ -19,19 +20,15 @@ class PcbCanvas : public QOpenGLWidget, protected QOpenGLFunctions_3_3_Core {
 public:
     explicit PcbCanvas(QWidget* parent = nullptr);
 
-    // Attach a board (non-owning). Triggers zone tessellation and a fit-to-bounds
-    // of the camera. GPU buffers are populated lazily on the next paintGL().
     void setBoard(const pdnkit::model::Board* board);
-
-    // Toggle a single layer's visibility. Re-paints; no rebuild of GPU data.
     void setLayerVisibility(int ordinal, bool visible);
-
-    // Re-run fit-to-bounds on whatever board is currently loaded.
     void fitToBoard();
 
+    // Attach (or clear, with an empty mesh) an IR-drop heat-map overlay.
+    // Uploaded lazily on the next paintGL.
+    void setIrResult(pdnkit::render::IrResultMesh result);
+
 signals:
-    // Emitted whenever the mouse moves over the canvas. Empty string when
-    // nothing is under the cursor; formatted summary otherwise (net + layer).
     void hoverInfo(const QString& info);
 
 protected:
@@ -47,6 +44,7 @@ protected:
 private:
     void buildGrid();
     void uploadBoardMeshes();
+    void uploadIrResult();
 
     struct LayerRange {
         int ordinal = 0;
@@ -57,7 +55,8 @@ private:
     pdnkit::render::Camera2D camera_;
     const pdnkit::model::Board* board_ = nullptr;
 
-    QOpenGLShaderProgram prog_;
+    QOpenGLShaderProgram flat_prog_;  // grid + board layer fills
+    QOpenGLShaderProgram heat_prog_;  // IR-drop overlay (viridis)
 
     QOpenGLBuffer grid_vbo_{QOpenGLBuffer::VertexBuffer};
     QOpenGLVertexArrayObject grid_vao_;
@@ -70,7 +69,13 @@ private:
     std::vector<pdnkit::render::LayerMesh> pending_meshes_;
     bool meshes_dirty_ = false;
 
-    // Per-layer visibility. Absent = visible (default). Map only stores overrides.
+    QOpenGLBuffer heat_vbo_{QOpenGLBuffer::VertexBuffer};
+    QOpenGLBuffer heat_ibo_{QOpenGLBuffer::IndexBuffer};
+    QOpenGLVertexArrayObject heat_vao_;
+    pdnkit::render::IrResultMesh pending_heat_;
+    int heat_index_count_ = 0;
+    bool heat_dirty_ = false;
+
     std::unordered_map<int, bool> layer_visible_;
 
     bool panning_ = false;

@@ -20,6 +20,7 @@ public:
 
 private slots:
     void onOpenKicadPcb();
+    void onAnalyzeStaticIrDrop();
 
 private:
     void populateLayerPanel();

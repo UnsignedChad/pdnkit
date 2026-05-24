@@ -14,7 +14,8 @@
 
 namespace {
 
-constexpr auto kVertexSrc = R"(
+// Flat-color shader: position only, single color uniform.
+constexpr auto kFlatVertSrc = R"(
 #version 330 core
 layout(location = 0) in vec2 a_pos;
 uniform mat4 u_proj;
@@ -23,7 +24,7 @@ void main() {
 }
 )";
 
-constexpr auto kFragmentSrc = R"(
+constexpr auto kFlatFragSrc = R"(
 #version 330 core
 uniform vec4 u_color;
 out vec4 frag_color;
@@ -32,9 +33,40 @@ void main() {
 }
 )";
 
-// Painter-order priority: bigger = drawn later (on top). KiCad puts F.Cu (0)
-// physically on top of the board; we draw inner copper first, then B.Cu, then
-// F.Cu so the top layer wins.
+// Heat-map shader: per-vertex scalar t in [0,1] → viridis-style colormap.
+constexpr auto kHeatVertSrc = R"(
+#version 330 core
+layout(location = 0) in vec2 a_pos;
+layout(location = 1) in float a_t;
+out float v_t;
+uniform mat4 u_proj;
+void main() {
+    gl_Position = u_proj * vec4(a_pos, 0.0, 1.0);
+    v_t = a_t;
+}
+)";
+
+constexpr auto kHeatFragSrc = R"(
+#version 330 core
+in float v_t;
+out vec4 frag_color;
+vec3 viridis(float t) {
+    t = clamp(t, 0.0, 1.0);
+    vec3 c0 = vec3(0.267, 0.005, 0.329);
+    vec3 c1 = vec3(0.231, 0.318, 0.545);
+    vec3 c2 = vec3(0.127, 0.567, 0.550);
+    vec3 c3 = vec3(0.369, 0.789, 0.382);
+    vec3 c4 = vec3(0.992, 0.906, 0.144);
+    if (t < 0.25) return mix(c0, c1, t * 4.0);
+    if (t < 0.50) return mix(c1, c2, (t - 0.25) * 4.0);
+    if (t < 0.75) return mix(c2, c3, (t - 0.50) * 4.0);
+    return mix(c3, c4, (t - 0.75) * 4.0);
+}
+void main() {
+    frag_color = vec4(viridis(v_t), 0.90);
+}
+)";
+
 int render_priority(int ord) {
     if (ord == 0) return 1000;
     if (ord == 31) return 500;
@@ -55,7 +87,8 @@ PcbCanvas::PcbCanvas(QWidget* parent) : QOpenGLWidget(parent) {
 void PcbCanvas::setBoard(const pdnkit::model::Board* board) {
     board_ = board;
     pending_meshes_.clear();
-    layer_visible_.clear();  // reset visibility to "all on"
+    layer_visible_.clear();
+    setIrResult({});  // clear any heat-map from a previous board
 
     if (board_) {
         pending_meshes_ = pdnkit::render::build_all_meshes(*board_);
@@ -75,11 +108,8 @@ void PcbCanvas::fitToBoard() {
     bool have_any = false;
     double lo_x = 0, lo_y = 0, hi_x = 0, hi_y = 0;
     auto include = [&](double x, double y) {
-        if (!have_any) {
-            lo_x = hi_x = x;
-            lo_y = hi_y = y;
-            have_any = true;
-        } else {
+        if (!have_any) { lo_x = hi_x = x; lo_y = hi_y = y; have_any = true; }
+        else {
             if (x < lo_x) lo_x = x;
             if (x > hi_x) hi_x = x;
             if (y < lo_y) lo_y = y;
@@ -103,15 +133,25 @@ void PcbCanvas::fitToBoard() {
     }
 }
 
+void PcbCanvas::setIrResult(pdnkit::render::IrResultMesh result) {
+    pending_heat_ = std::move(result);
+    heat_dirty_ = true;
+    update();
+}
+
 void PcbCanvas::initializeGL() {
     initializeOpenGLFunctions();
     glClearColor(0.10f, 0.10f, 0.12f, 1.0f);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    prog_.addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexSrc);
-    prog_.addShaderFromSourceCode(QOpenGLShader::Fragment, kFragmentSrc);
-    prog_.link();
+    flat_prog_.addShaderFromSourceCode(QOpenGLShader::Vertex,   kFlatVertSrc);
+    flat_prog_.addShaderFromSourceCode(QOpenGLShader::Fragment, kFlatFragSrc);
+    flat_prog_.link();
+
+    heat_prog_.addShaderFromSourceCode(QOpenGLShader::Vertex,   kHeatVertSrc);
+    heat_prog_.addShaderFromSourceCode(QOpenGLShader::Fragment, kHeatFragSrc);
+    heat_prog_.link();
 
     grid_vao_.create();
     grid_vbo_.create();
@@ -123,11 +163,27 @@ void PcbCanvas::initializeGL() {
     board_vao_.bind();
     board_vbo_.bind();
     board_ibo_.bind();
-    prog_.enableAttributeArray(0);
-    prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+    flat_prog_.enableAttributeArray(0);
+    flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
     board_vao_.release();
     board_vbo_.release();
     board_ibo_.release();
+
+    heat_vao_.create();
+    heat_vbo_.create();
+    heat_ibo_.create();
+    heat_vao_.bind();
+    heat_vbo_.bind();
+    heat_ibo_.bind();
+    // Stride = 3 floats (x, y, t).
+    heat_prog_.enableAttributeArray(0);
+    heat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2, 3 * sizeof(float));
+    heat_prog_.enableAttributeArray(1);
+    heat_prog_.setAttributeBuffer(1, GL_FLOAT, 2 * sizeof(float), 1,
+                                  3 * sizeof(float));
+    heat_vao_.release();
+    heat_vbo_.release();
+    heat_ibo_.release();
 }
 
 void PcbCanvas::buildGrid() {
@@ -144,8 +200,8 @@ void PcbCanvas::buildGrid() {
     grid_vbo_.bind();
     grid_vbo_.allocate(verts.data(),
                        static_cast<int>(verts.size() * sizeof(float)));
-    prog_.enableAttributeArray(0);
-    prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+    flat_prog_.enableAttributeArray(0);
+    flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
     grid_vbo_.release();
     grid_vao_.release();
 }
@@ -184,13 +240,37 @@ void PcbCanvas::uploadBoardMeshes() {
     board_ibo_.bind();
     board_ibo_.allocate(all_indices.data(),
                         static_cast<int>(all_indices.size() * sizeof(std::uint32_t)));
-    prog_.enableAttributeArray(0);
-    prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+    flat_prog_.enableAttributeArray(0);
+    flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
     board_vao_.release();
     board_vbo_.release();
     board_ibo_.release();
 
     meshes_dirty_ = false;
+}
+
+void PcbCanvas::uploadIrResult() {
+    heat_index_count_ = static_cast<int>(pending_heat_.indices.size());
+
+    heat_vao_.bind();
+    heat_vbo_.bind();
+    heat_vbo_.allocate(pending_heat_.vertices.data(),
+                       static_cast<int>(pending_heat_.vertices.size() *
+                                        sizeof(float)));
+    heat_ibo_.bind();
+    heat_ibo_.allocate(pending_heat_.indices.data(),
+                       static_cast<int>(pending_heat_.indices.size() *
+                                        sizeof(std::uint32_t)));
+    heat_prog_.enableAttributeArray(0);
+    heat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2, 3 * sizeof(float));
+    heat_prog_.enableAttributeArray(1);
+    heat_prog_.setAttributeBuffer(1, GL_FLOAT, 2 * sizeof(float), 1,
+                                  3 * sizeof(float));
+    heat_vao_.release();
+    heat_vbo_.release();
+    heat_ibo_.release();
+
+    heat_dirty_ = false;
 }
 
 void PcbCanvas::resizeGL(int w, int h) {
@@ -199,6 +279,7 @@ void PcbCanvas::resizeGL(int w, int h) {
 
 void PcbCanvas::paintGL() {
     if (meshes_dirty_) uploadBoardMeshes();
+    if (heat_dirty_) uploadIrResult();
 
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -209,10 +290,10 @@ void PcbCanvas::paintGL() {
         m[2], m[6], m[10], m[14],
         m[3], m[7], m[11], m[15]);
 
-    prog_.bind();
-    prog_.setUniformValue("u_proj", proj);
+    flat_prog_.bind();
+    flat_prog_.setUniformValue("u_proj", proj);
 
-    prog_.setUniformValue("u_color", QVector4D(0.22f, 0.22f, 0.28f, 1.0f));
+    flat_prog_.setUniformValue("u_color", QVector4D(0.22f, 0.22f, 0.28f, 1.0f));
     grid_vao_.bind();
     glDrawArrays(GL_LINES, 0, grid_vertex_count_);
     grid_vao_.release();
@@ -223,16 +304,26 @@ void PcbCanvas::paintGL() {
             auto vis_it = layer_visible_.find(r.ordinal);
             const bool visible = (vis_it == layer_visible_.end()) || vis_it->second;
             if (!visible) continue;
-            prog_.setUniformValue("u_color",
-                                   toQVec(pdnkit::render::layer_color(r.ordinal)));
+            flat_prog_.setUniformValue("u_color",
+                                       toQVec(pdnkit::render::layer_color(r.ordinal)));
             glDrawElements(GL_TRIANGLES, r.index_count, GL_UNSIGNED_INT,
                            reinterpret_cast<const void*>(
-                               static_cast<std::uintptr_t>(r.index_start * sizeof(std::uint32_t))));
+                               static_cast<std::uintptr_t>(r.index_start *
+                                                            sizeof(std::uint32_t))));
         }
         board_vao_.release();
     }
+    flat_prog_.release();
 
-    prog_.release();
+    // IR-drop heat-map overlay, on top of the board.
+    if (heat_index_count_ > 0) {
+        heat_prog_.bind();
+        heat_prog_.setUniformValue("u_proj", proj);
+        heat_vao_.bind();
+        glDrawElements(GL_TRIANGLES, heat_index_count_, GL_UNSIGNED_INT, nullptr);
+        heat_vao_.release();
+        heat_prog_.release();
+    }
 }
 
 void PcbCanvas::mousePressEvent(QMouseEvent* e) {
@@ -253,7 +344,6 @@ void PcbCanvas::mouseMoveEvent(QMouseEvent* e) {
     if (board_) {
         const auto world = camera_.screen_to_world(
             e->pos().x(), e->pos().y(), width(), height());
-        // Hover pick tolerance: ~4 screen pixels, expressed in world units.
         const double tol = 4.0 / camera_.pixels_per_meter;
         const auto hit = pdnkit::hittest::at_point(*board_, world, tol);
 

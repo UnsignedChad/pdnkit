@@ -14,6 +14,9 @@
 #include "LayerPanel.h"
 #include "PcbCanvas.h"
 #include "parser/KicadPcbParser.h"
+#include "pi/IrMesher.h"
+#include "pi/IrSolver.h"
+#include "render/IrResultMesh.h"
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("pdnkit");
@@ -44,6 +47,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(fitAct, &QAction::triggered, canvas_, &PcbCanvas::fitToBoard);
     viewMenu->addAction(dock->toggleViewAction());
 
+    auto* analyzeMenu = menuBar()->addMenu("&Analyze");
+    auto* irAct = analyzeMenu->addAction("Static &IR drop on F.Cu");
+    irAct->setShortcut(QKeySequence("Ctrl+I"));
+    connect(irAct, &QAction::triggered, this, &MainWindow::onAnalyzeStaticIrDrop);
+    auto* clearAct = analyzeMenu->addAction("&Clear overlay");
+    connect(clearAct, &QAction::triggered, canvas_, [this]() {
+        canvas_->setIrResult({});
+    });
+
     // Permanent label on the right of the status bar for hover info.
     hover_label_ = new QLabel(this);
     hover_label_->setMinimumWidth(300);
@@ -59,6 +71,79 @@ void MainWindow::onOpenKicadPcb() {
         "KiCad PCB (*.kicad_pcb);;All files (*)");
     if (path.isEmpty()) return;
     loadKicadPcb(path);
+}
+
+void MainWindow::onAnalyzeStaticIrDrop() {
+    if (!board_) {
+        QMessageBox::information(this, "Static IR drop",
+                                 "Open a KiCad PCB first.");
+        return;
+    }
+
+    // v0 net selection: first net that has at least one zone on F.Cu (ord 0).
+    // Future commit replaces this with a proper net-selector UI.
+    int target_net = -1;
+    for (const auto& z : board_->zones) {
+        if (z.layer_ordinal == 0 && !z.filled.empty()) {
+            target_net = z.net_id;
+            break;
+        }
+    }
+    if (target_net < 0) {
+        QMessageBox::warning(this, "Static IR drop",
+                             "No zone fill found on F.Cu — nothing to analyze.");
+        return;
+    }
+
+    pdnkit::pi::MeshConfig mc;
+    mc.cell_size = 0.5e-3;  // 0.5 mm default; ~thousands of nodes per cm²
+    mc.net_id = target_net;
+    mc.layer_ordinal = 0;
+    auto mesh = pdnkit::pi::IrMesher::build(*board_, mc);
+    if (mesh.nodes.empty()) {
+        QMessageBox::warning(this, "Static IR drop",
+                             "Mesher produced no nodes for the selected net "
+                             "(check cell_size vs. zone size).");
+        return;
+    }
+    if (mesh.source_node_ids.empty() || mesh.sink_node_ids.empty()) {
+        QMessageBox::warning(this, "Static IR drop",
+                             "Need at least two pads on the target net to set "
+                             "source/sink. Found insufficient pads on F.Cu.");
+        return;
+    }
+
+    auto sol = pdnkit::pi::IrSolver::solve(mesh, {1.0});
+    if (!sol.ok) {
+        QMessageBox::critical(this, "Static IR drop",
+                              QString("Solver failed: %1")
+                                  .arg(QString::fromStdString(sol.error)));
+        return;
+    }
+
+    auto result_mesh = pdnkit::render::build_ir_result_mesh(mesh, sol,
+                                                             mc.cell_size);
+    canvas_->setIrResult(std::move(result_mesh));
+
+    const auto* net = board_->find_net(target_net);
+    const QString net_name = (net && !net->name.empty())
+        ? QString::fromStdString(net->name)
+        : QString("net %1").arg(target_net);
+    const double v_drop_mv = (sol.max_v - sol.min_v) * 1000.0;
+    statusBar()->showMessage(
+        QString("IR drop on %1 (F.Cu, 1A): %2 nodes, %3 resistors, "
+                "Vmax = %4 mV, Vmin = %5 mV  (drop %6 mV)")
+            .arg(net_name)
+            .arg(mesh.nodes.size())
+            .arg(mesh.resistors.size())
+            .arg(sol.max_v * 1000.0, 0, 'f', 4)
+            .arg(sol.min_v * 1000.0, 0, 'f', 4)
+            .arg(v_drop_mv, 0, 'f', 4));
+    spdlog::info("IR drop on net {} ({}): {} nodes, {} resistors, "
+                 "Vmax={:.6f}V, Vmin={:.6f}V",
+                 target_net, net_name.toStdString(),
+                 mesh.nodes.size(), mesh.resistors.size(),
+                 sol.max_v, sol.min_v);
 }
 
 void MainWindow::populateLayerPanel() {

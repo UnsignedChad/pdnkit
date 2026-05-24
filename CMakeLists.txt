@@ -33,6 +33,7 @@ add_library(pdnkit_core STATIC
     src/pi/IrSolver.cpp
     src/render/Camera2D.cpp
     src/render/ZoneMesher.cpp
+    src/render/IrResultMesh.cpp
     src/render/SegmentMesher.cpp
     src/render/ViaMesher.cpp
 )

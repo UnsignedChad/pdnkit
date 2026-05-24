@@ -13,6 +13,7 @@ add_executable(pdnkit_tests
     hit_test.cpp
     ir_mesher_test.cpp
     ir_solver_test.cpp
+    ir_result_mesh_test.cpp
 )
 
 target_link_libraries(pdnkit_tests PRIVATE
