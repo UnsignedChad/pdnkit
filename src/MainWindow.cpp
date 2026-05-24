@@ -4,6 +4,7 @@
 
 #include <QDockWidget>
 #include <QFileDialog>
+#include <QHBoxLayout>
 #include <QFileInfo>
 #include <QLabel>
 #include <QMenuBar>
@@ -12,6 +13,7 @@
 #include <spdlog/spdlog.h>
 
 #include "AnalysisPanel.h"
+#include "ColorLegend.h"
 #include "LayerPanel.h"
 #include "PcbCanvas.h"
 #include "parser/KicadPcbParser.h"
@@ -24,7 +26,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     resize(1280, 800);
 
     canvas_ = new PcbCanvas(this);
-    setCentralWidget(canvas_);
+    legend_ = new ColorLegend(this);
+
+    auto* central = new QWidget(this);
+    auto* central_layout = new QHBoxLayout(central);
+    central_layout->setContentsMargins(0, 0, 0, 0);
+    central_layout->setSpacing(0);
+    central_layout->addWidget(canvas_, 1);
+    central_layout->addWidget(legend_);
+    setCentralWidget(central);
 
     // Layer-visibility dock panel on the right.
     layer_panel_ = new LayerPanel(this);
@@ -44,7 +54,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(analysis_panel_, &AnalysisPanel::runRequested,
             this, &MainWindow::onAnalyzeStaticIrDrop);
     connect(analysis_panel_, &AnalysisPanel::clearRequested,
-            canvas_, [this]() { canvas_->setIrResult({}); });
+            canvas_, [this]() { canvas_->setIrResult({}); legend_->setRange(0, 0); });
 
     auto* fileMenu = menuBar()->addMenu("&File");
     auto* openAct = fileMenu->addAction("&Open KiCad PCB...");
@@ -67,6 +77,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* clearAct = analyzeMenu->addAction("&Clear overlay");
     connect(clearAct, &QAction::triggered, canvas_, [this]() {
         canvas_->setIrResult({});
+        legend_->setRange(0, 0);
     });
 
     // Permanent label on the right of the status bar for hover info.
@@ -127,6 +138,7 @@ void MainWindow::onAnalyzeStaticIrDrop() {
     auto result_mesh = pdnkit::render::build_ir_result_mesh(mesh, sol,
                                                              mc.cell_size);
     canvas_->setIrResult(std::move(result_mesh));
+    legend_->setRange(sol.min_v, sol.max_v);
 
     const auto* net = board_->find_net(mc.net_id);
     const QString net_name = (net && !net->name.empty())
