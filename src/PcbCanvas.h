@@ -152,6 +152,15 @@ private:
     int cavity_port_index_count_ = 0;
     bool cavity_dirty_ = false;
 
+    // Hotspot ring (yellow, drawn on top of heat-map markers).
+    QOpenGLBuffer hotspot_vbo_{QOpenGLBuffer::VertexBuffer};
+    QOpenGLBuffer hotspot_ibo_{QOpenGLBuffer::IndexBuffer};
+    QOpenGLVertexArrayObject hotspot_vao_;
+    int hotspot_index_count_ = 0;
+    bool hotspot_active_ = false;
+    double hotspot_x_ = 0.0;
+    double hotspot_y_ = 0.0;
+
     std::unordered_map<int, bool> layer_visible_;
 
     bool panning_ = false;

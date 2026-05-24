@@ -85,6 +85,22 @@ IrResultMesh build_ir_result_mesh(const pi::IrMesh& mesh,
         }
     }
 
+    // Hotspot: node with the lowest voltage (= worst drop from source).
+    {
+        int worst = -1;
+        double v_worst = 0.0;
+        for (std::size_t i = 0; i < mesh.nodes.size(); ++i) {
+            const double v = solution.voltages[i];
+            if (worst < 0 || v < v_worst) { worst = static_cast<int>(i); v_worst = v; }
+        }
+        if (worst >= 0) {
+            out.hotspot.valid = true;
+            out.hotspot.x = mesh.nodes[worst].x;
+            out.hotspot.y = mesh.nodes[worst].y;
+            out.hotspot.value = v_worst;
+            out.hotspot.is_current = false;
+        }
+    }
     return out;
 }
 
@@ -216,6 +232,40 @@ IrResultMesh build_current_density_mesh(const pi::IrMesh& mesh,
     // color t = (|J| - min) / (max - min).
     out.v_min = *std::min_element(jmag.begin(), jmag.end());
     out.v_max = *std::max_element(jmag.begin(), jmag.end());
+
+    // Hotspot: node with the largest |J| -- the bottleneck where current
+    // is crowding. Skip source/sink nodes themselves (they always show
+    // the steepest gradient because of the boundary, which is a
+    // discretization artifact, not a real bottleneck).
+    {
+        std::vector<bool> is_terminal(mesh.nodes.size(), false);
+        for (int nid : mesh.source_node_ids)
+            if (nid >= 0 && nid < static_cast<int>(is_terminal.size()))
+                is_terminal[nid] = true;
+        for (int nid : mesh.sink_node_ids)
+            if (nid >= 0 && nid < static_cast<int>(is_terminal.size()))
+                is_terminal[nid] = true;
+        int worst = -1;
+        double j_worst = -1.0;
+        for (std::size_t i = 0; i < jmag.size(); ++i) {
+            if (is_terminal[i]) continue;
+            if (jmag[i] > j_worst) { j_worst = jmag[i]; worst = static_cast<int>(i); }
+        }
+        // If every node was a terminal (degenerate fixture), fall back
+        // to the absolute max.
+        if (worst < 0) {
+            for (std::size_t i = 0; i < jmag.size(); ++i) {
+                if (jmag[i] > j_worst) { j_worst = jmag[i]; worst = static_cast<int>(i); }
+            }
+        }
+        if (worst >= 0) {
+            out.hotspot.valid = true;
+            out.hotspot.x = mesh.nodes[worst].x;
+            out.hotspot.y = mesh.nodes[worst].y;
+            out.hotspot.value = j_worst;
+            out.hotspot.is_current = true;
+        }
+    }
     const double span = out.v_max - out.v_min;
     const double inv_span = (span > 0.0) ? 1.0 / span : 0.0;
 

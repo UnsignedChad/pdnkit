@@ -56,3 +56,29 @@ TEST_CASE("ir-result-mesh: zero-span solution clamps t to 0", "[result-mesh]") {
     REQUIRE(r.vertex_count() == 4);
     REQUIRE(r.vertices[2] == Approx(0.0f));
 }
+
+
+// Hotspot field: the voltage builder marks the node with the lowest V,
+// the current-density builder marks the node with the largest |J|
+// (excluding source/sink boundary nodes whose gradients are inflated
+// by the discretized boundary condition).
+TEST_CASE("ir-result-mesh: hotspot points at the worst node (voltage)",
+          "[result-mesh][hotspot]") {
+    IrMesh mesh;
+    mesh.nodes.push_back({0, 0.0,   0.0, 0, 0, 0});
+    mesh.nodes.push_back({1, 0.001, 0.0, 1, 0, 0});
+    mesh.nodes.push_back({2, 0.002, 0.0, 2, 0, 0});
+
+    Solution sol;
+    sol.ok = true;
+    sol.voltages = {1.0, 0.4, 0.05};  // node 2 is the worst-drop
+    sol.min_v = 0.05;
+    sol.max_v = 1.0;
+
+    auto r = build_ir_result_mesh(mesh, sol, 1.0e-3);
+    REQUIRE(r.hotspot.valid);
+    REQUIRE(r.hotspot.x == Approx(0.002));
+    REQUIRE(r.hotspot.y == Approx(0.0));
+    REQUIRE(r.hotspot.value == Approx(0.05));
+    REQUIRE_FALSE(r.hotspot.is_current);
+}

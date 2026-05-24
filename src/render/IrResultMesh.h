@@ -41,6 +41,20 @@ struct IrResultMesh {
     };
     std::vector<Marker> markers;
 
+    // Worst-case node, populated by the builders. Voltage view: the node
+    // with the lowest V (largest IR drop from source). Current-density
+    // view: the node with the highest |J| (bottleneck). The canvas
+    // renders a yellow ring + label here so the user sees the problem
+    // spot at a glance.
+    struct Hotspot {
+        bool valid = false;
+        double x = 0.0;
+        double y = 0.0;
+        double value = 0.0;       // V (voltage view) or A/m (J view)
+        bool is_current = false;  // true: A/m; false: V
+    };
+    Hotspot hotspot;
+
     std::size_t vertex_count() const noexcept { return vertices.size() / 3; }
 };
 

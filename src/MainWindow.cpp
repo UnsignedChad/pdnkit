@@ -312,17 +312,38 @@ void MainWindow::onAnalyzeStaticIrDrop() {
     for (const auto& [_, cur] : mc.pad_currents) {
         if (cur > 0.0) total_injected += cur;
     }
+    // Find the worst-drop node so we can name where the hotspot sits in
+    // world (mm) coords. (build_ir_result_mesh already marks it for the
+    // canvas, but the status bar still says only the V range -- this
+    // tells the user *where* to look.)
+    double worst_x = 0.0, worst_y = 0.0;
+    {
+        double v_min = 0.0;
+        bool first = true;
+        for (std::size_t i = 0; i < last_mesh_.nodes.size(); ++i) {
+            const double v = last_solution_.voltages[i];
+            if (first || v < v_min) {
+                v_min = v;
+                worst_x = last_mesh_.nodes[i].x;
+                worst_y = last_mesh_.nodes[i].y;
+                first = false;
+            }
+        }
+    }
     statusBar()->showMessage(
         QString("IR drop on %1 (%2, %3 A injected): %4 nodes, %5 resistors, "
-                "Vmax = %6 mV, Vmin = %7 mV  (drop %8 mV)")
+                "Vmax = %6 mV, Vmin = %7 mV  (drop %8 mV)  "
+                "Hotspot at (%9, %10) mm")
             .arg(net_name)
             .arg(layer_name)
             .arg(total_injected, 0, 'f', 3)
-            .arg(mesh.nodes.size())
-            .arg(mesh.resistors.size())
-            .arg(sol.max_v * 1000.0, 0, 'f', 4)
-            .arg(sol.min_v * 1000.0, 0, 'f', 4)
-            .arg(v_drop_mv, 0, 'f', 4));
+            .arg(last_mesh_.nodes.size())
+            .arg(last_mesh_.resistors.size())
+            .arg(last_solution_.max_v * 1000.0, 0, 'f', 4)
+            .arg(last_solution_.min_v * 1000.0, 0, 'f', 4)
+            .arg(v_drop_mv, 0, 'f', 4)
+            .arg(worst_x * 1000.0, 0, 'f', 2)
+            .arg(worst_y * 1000.0, 0, 'f', 2));
     spdlog::info("IR drop on net {} ({}) layer {}: {} nodes, {} resistors, "
                  "Vmax={:.6f}V, Vmin={:.6f}V",
                  mc.net_id, net_name.toStdString(), mc.layer_ordinal,

@@ -255,6 +255,18 @@ void PcbCanvas::initializeGL() {
     cavity_port_vao_.create();
     cavity_port_vbo_.create();
     cavity_port_ibo_.create();
+
+    hotspot_vao_.create();
+    hotspot_vbo_.create();
+    hotspot_ibo_.create();
+    hotspot_vao_.bind();
+    hotspot_vbo_.bind();
+    hotspot_ibo_.bind();
+    flat_prog_.enableAttributeArray(0);
+    flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+    hotspot_vao_.release();
+    hotspot_vbo_.release();
+    hotspot_ibo_.release();
     cavity_port_vao_.bind();
     cavity_port_vbo_.bind();
     cavity_port_ibo_.bind();
@@ -389,6 +401,53 @@ void PcbCanvas::uploadIrResult() {
         marker_vao_.release();
         marker_vbo_.release();
         marker_ibo_.release();
+    }
+
+    // Hotspot ring: yellow 16-segment annulus around the worst point.
+    if (pending_heat_.hotspot.valid) {
+        hotspot_active_ = true;
+        hotspot_x_ = pending_heat_.hotspot.x;
+        hotspot_y_ = pending_heat_.hotspot.y;
+        const double r_outer = 1.2e-3;  // 1.2 mm world-space ring
+        const double r_inner = 0.7e-3;
+        constexpr int kSeg = 24;
+        std::vector<float> verts;
+        std::vector<std::uint32_t> idx;
+        verts.reserve(kSeg * 4);
+        idx.reserve(kSeg * 6);
+        for (int k = 0; k < kSeg; ++k) {
+            const double a0 = (2.0 * M_PI) * static_cast<double>(k) / kSeg;
+            const double a1 = (2.0 * M_PI) * static_cast<double>(k + 1) / kSeg;
+            const float ox0 = static_cast<float>(hotspot_x_ + r_outer * std::cos(a0));
+            const float oy0 = static_cast<float>(hotspot_y_ + r_outer * std::sin(a0));
+            const float ix0 = static_cast<float>(hotspot_x_ + r_inner * std::cos(a0));
+            const float iy0 = static_cast<float>(hotspot_y_ + r_inner * std::sin(a0));
+            const float ox1 = static_cast<float>(hotspot_x_ + r_outer * std::cos(a1));
+            const float oy1 = static_cast<float>(hotspot_y_ + r_outer * std::sin(a1));
+            const float ix1 = static_cast<float>(hotspot_x_ + r_inner * std::cos(a1));
+            const float iy1 = static_cast<float>(hotspot_y_ + r_inner * std::sin(a1));
+            const std::uint32_t base = static_cast<std::uint32_t>(verts.size() / 2);
+            verts.insert(verts.end(), {ox0, oy0, ix0, iy0, ix1, iy1, ox1, oy1});
+            idx.insert(idx.end(),
+                {base + 0, base + 1, base + 2,
+                 base + 0, base + 2, base + 3});
+        }
+        hotspot_index_count_ = static_cast<int>(idx.size());
+        hotspot_vao_.bind();
+        hotspot_vbo_.bind();
+        hotspot_vbo_.allocate(verts.data(),
+            static_cast<int>(verts.size() * sizeof(float)));
+        hotspot_ibo_.bind();
+        hotspot_ibo_.allocate(idx.data(),
+            static_cast<int>(idx.size() * sizeof(std::uint32_t)));
+        flat_prog_.enableAttributeArray(0);
+        flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+        hotspot_vao_.release();
+        hotspot_vbo_.release();
+        hotspot_ibo_.release();
+    } else {
+        hotspot_active_ = false;
+        hotspot_index_count_ = 0;
     }
 
     heat_vao_.bind();
@@ -672,6 +731,18 @@ void PcbCanvas::paintGL() {
         cavity_port_vao_.bind();
         glDrawElements(GL_TRIANGLES, cavity_port_index_count_, GL_UNSIGNED_INT, nullptr);
         cavity_port_vao_.release();
+        flat_prog_.release();
+    }
+
+    // Hotspot ring on top of everything else, in saturated yellow.
+    if (hotspot_active_ && hotspot_index_count_ > 0) {
+        flat_prog_.bind();
+        flat_prog_.setUniformValue("u_proj", proj);
+        flat_prog_.setUniformValue("u_color", QVector4D(1.0f, 0.95f, 0.10f, 1.0f));
+        hotspot_vao_.bind();
+        glDrawElements(GL_TRIANGLES, hotspot_index_count_,
+                       GL_UNSIGNED_INT, nullptr);
+        hotspot_vao_.release();
         flat_prog_.release();
     }
 }
