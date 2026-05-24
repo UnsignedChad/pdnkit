@@ -149,3 +149,13 @@ TEST_CASE("parser: unknown layer name in segment is an error", "[parser]") {
     )";
     REQUIRE_THROWS_AS(KicadPcbParser::parse_string(bad), KicadParseError);
 }
+
+TEST_CASE("parser: pad shape and size extracted", "[parser]") {
+    auto b = KicadPcbParser::parse_string(kTinyBoard);
+    REQUIRE(b.pads.size() == 2);
+    // kTinyBoard pads are (pad "N" smd rect (size 0.5 0.5) ...).
+    REQUIRE(b.pads[0].shape == pdnkit::model::PadShape::Rect);
+    REQUIRE(b.pads[0].size.x == 0.0005);
+    REQUIRE(b.pads[0].size.y == 0.0005);
+    REQUIRE(b.pads[1].shape == pdnkit::model::PadShape::Rect);
+}

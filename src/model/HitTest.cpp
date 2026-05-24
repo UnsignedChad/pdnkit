@@ -71,11 +71,26 @@ Hit at_point(const model::Board& board, model::Point2 world,
 
     // 1. Pads (highest priority — small, on top).
     for (const auto& p : board.pads) {
-        const double tol = kVisualPadRadius + pick_radius;
-        if (dist_squared(world, p.at) <= tol * tol) {
-            int layer = p.layer_ordinals.empty() ? 0 : p.layer_ordinals.front();
-            return {Hit::Kind::Pad, p.net_id, layer};
+        const int layer = p.layer_ordinals.empty() ? 0 : p.layer_ordinals.front();
+        bool hit = false;
+        if (p.shape == model::PadShape::Circle || p.size.x <= 0.0 || p.size.y <= 0.0) {
+            const double r = (p.size.x > 0.0) ? 0.5 * p.size.x : kVisualPadRadius;
+            const double tol = r + pick_radius;
+            if (dist_squared(world, p.at) <= tol * tol) hit = true;
+        } else {
+            // Transform world into pad-local axes (undo translation + rotation),
+            // then check against the axis-aligned half-extents + pick_radius.
+            const double dx = world.x - p.at.x;
+            const double dy = world.y - p.at.y;
+            const double cs = std::cos(-p.rotation);
+            const double sn = std::sin(-p.rotation);
+            const double lx = cs * dx - sn * dy;
+            const double ly = sn * dx + cs * dy;
+            const double hw = 0.5 * p.size.x + pick_radius;
+            const double hh = 0.5 * p.size.y + pick_radius;
+            if (std::abs(lx) <= hw && std::abs(ly) <= hh) hit = true;
         }
+        if (hit) return {Hit::Kind::Pad, p.net_id, layer};
     }
 
     // 2. Vias.

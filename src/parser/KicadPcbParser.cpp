@@ -238,6 +238,21 @@ private:
                     (pad->children[1].is_string() || pad->children[1].is_symbol())) {
                     p.name = pad->children[1].text;
                 }
+                // children[3] is the shape token (circle/rect/oval/roundrect/...).
+                if (pad->children.size() >= 4 && pad->children[3].is_symbol()) {
+                    const std::string& shp = pad->children[3].text;
+                    if (shp == "circle")         p.shape = model::PadShape::Circle;
+                    else if (shp == "rect")      p.shape = model::PadShape::Rect;
+                    else if (shp == "oval")      p.shape = model::PadShape::Oval;
+                    else if (shp == "roundrect") p.shape = model::PadShape::RoundRect;
+                    else                          p.shape = model::PadShape::Custom;
+                }
+                if (const Node* sz = find_child(*pad, "size")) {
+                    if (sz->children.size() >= 3) {
+                        p.size.x = expect_number(sz->children[1]) * kMmToM;
+                        p.size.y = expect_number(sz->children[2]) * kMmToM;
+                    }
+                }
                 if (const Node* at = find_child(*pad, "at")) {
                     model::Point2 local = read_xy_tail(*at);
                     // Rotate local by fp_rot then translate by fp_at.

@@ -60,10 +60,21 @@ struct Via {
     int net_id = 0;
 };
 
-// Component pad. Geometry is intentionally minimal for v0 — extend as needed.
+enum class PadShape {
+    Circle,      // (drill diameter for through-hole, size.x for SMD round)
+    Rect,        // size = (width, height)
+    Oval,        // rounded rectangle approximated as Rect for v0
+    RoundRect,   // rounded rectangle approximated as Rect for v0
+    Custom,      // not supported v0 — falls back to Rect with size
+};
+
+// Component pad. Size is post-mm-to-m converted; defaults are 0 meaning
+// "unknown" (the renderer falls back to a small disk).
 struct Pad {
     Point2 at;
     double rotation = 0.0;     // radians
+    Point2 size{0.0, 0.0};     // width, height in meters
+    PadShape shape = PadShape::Circle;
     std::vector<int> layer_ordinals;
     int net_id = 0;
     std::string name;          // KiCad pad designator ("1", "+", etc.)

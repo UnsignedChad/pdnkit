@@ -125,3 +125,43 @@ TEST_CASE("hittest: name() handles all kinds", "[hittest]") {
     REQUIRE(std::string(pdnkit::hittest::name(Hit::Kind::Zone)) == "zone");
     REQUIRE(std::string(pdnkit::hittest::name(Hit::Kind::None)) == "");
 }
+
+TEST_CASE("hittest: rect pad respects width/height + rotation", "[hittest]") {
+    Board b;
+    b.stackup.layers.push_back({0, "F.Cu", "signal"});
+    Pad p;
+    p.at = {0.0, 0.0};
+    p.size = {0.004, 0.001};  // 4mm wide, 1mm tall
+    p.shape = pdnkit::model::PadShape::Rect;
+    p.rotation = 0.0;
+    p.layer_ordinals = {0};
+    p.net_id = 9;
+    b.pads.push_back(p);
+
+    // Inside the wide direction: hit.
+    REQUIRE(at_point(b, {0.0015, 0.0}, 0).kind == Hit::Kind::Pad);
+    // Beyond width: miss.
+    REQUIRE(at_point(b, {0.0025, 0.0}, 0).kind == Hit::Kind::None);
+    // Inside height: hit.
+    REQUIRE(at_point(b, {0.0, 0.0004}, 0).kind == Hit::Kind::Pad);
+    // Beyond height: miss.
+    REQUIRE(at_point(b, {0.0, 0.0008}, 0).kind == Hit::Kind::None);
+}
+
+TEST_CASE("hittest: rect pad rotated 90deg swaps W/H sensitivity", "[hittest]") {
+    Board b;
+    b.stackup.layers.push_back({0, "F.Cu", "signal"});
+    Pad p;
+    p.at = {0.0, 0.0};
+    p.size = {0.004, 0.001};
+    p.shape = pdnkit::model::PadShape::Rect;
+    p.rotation = 1.5707963267948966;  // 90deg
+    p.layer_ordinals = {0};
+    b.pads.push_back(p);
+
+    // After 90deg rotation, the 4mm direction is now Y. So (0, 0.0015) should hit.
+    REQUIRE(at_point(b, {0.0, 0.0015}, 0).kind == Hit::Kind::Pad);
+    // And (0.0008, 0) should miss because the rotated tall direction (now X)
+    // is only 1mm tall, so 0.8mm is outside half-extent 0.5mm.
+    REQUIRE(at_point(b, {0.0008, 0.0}, 0).kind == Hit::Kind::None);
+}
