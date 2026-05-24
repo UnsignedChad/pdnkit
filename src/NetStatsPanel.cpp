@@ -124,10 +124,23 @@ void NetStatsPanel::rebuild() {
         if (n.id == 0 && a.pads == 0 && a.segs == 0 && a.area_m2 == 0.0) continue;
 
         table_->insertRow(row);
-        table_->setItem(row, 0,
-            new QTableWidgetItem(n.name.empty()
-                                  ? QString("(unnamed)")
-                                  : QString::fromStdString(n.name)));
+        auto* name_item = new QTableWidgetItem(n.name.empty()
+                                                ? QString("(unnamed)")
+                                                : QString::fromStdString(n.name));
+        // Power-rail-like names (+3V3 / VCC / GND / etc.) get bold so the
+        // typical analysis target stands out at a glance.
+        const std::string& nm = n.name;
+        const bool is_power_rail =
+            !nm.empty() && (nm[0] == "+"[0] ||
+                            nm == "GND" || nm == "VCC" ||
+                            nm == "VDD" || nm == "VBUS" ||
+                            nm == "VEE" || nm == "VSS");
+        if (is_power_rail) {
+            QFont f = name_item->font();
+            f.setBold(true);
+            name_item->setFont(f);
+        }
+        table_->setItem(row, 0, name_item);
         table_->setItem(row, 1, new NumberItem(n.id, 0));
         table_->setItem(row, 2, new NumberItem(a.pads, 0));
         table_->setItem(row, 3, new NumberItem(a.segs, 0));
