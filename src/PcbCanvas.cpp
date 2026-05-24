@@ -252,6 +252,7 @@ void PcbCanvas::uploadBoardMeshes() {
 
 void PcbCanvas::uploadIrResult() {
     heat_index_count_ = static_cast<int>(pending_heat_.indices.size());
+    heat_layer_ranges_ = pending_heat_.layer_ranges;
 
     heat_vao_.bind();
     heat_vbo_.bind();
@@ -316,12 +317,26 @@ void PcbCanvas::paintGL() {
     }
     flat_prog_.release();
 
-    // IR-drop heat-map overlay, on top of the board.
+    // IR-drop heat-map overlay, on top of the board. Per-layer ranges so
+    // we honor the same layer visibility map that filters board geometry.
     if (heat_index_count_ > 0) {
         heat_prog_.bind();
         heat_prog_.setUniformValue("u_proj", proj);
         heat_vao_.bind();
-        glDrawElements(GL_TRIANGLES, heat_index_count_, GL_UNSIGNED_INT, nullptr);
+        if (heat_layer_ranges_.empty()) {
+            // Single-layer or pre-grouped legacy result — draw the whole batch.
+            glDrawElements(GL_TRIANGLES, heat_index_count_, GL_UNSIGNED_INT, nullptr);
+        } else {
+            for (const auto& r : heat_layer_ranges_) {
+                auto vis_it = layer_visible_.find(r.ordinal);
+                const bool visible = (vis_it == layer_visible_.end()) || vis_it->second;
+                if (!visible) continue;
+                glDrawElements(GL_TRIANGLES, r.index_count, GL_UNSIGNED_INT,
+                               reinterpret_cast<const void*>(
+                                   static_cast<std::uintptr_t>(
+                                       r.index_start * sizeof(std::uint32_t))));
+            }
+        }
         heat_vao_.release();
         heat_prog_.release();
     }

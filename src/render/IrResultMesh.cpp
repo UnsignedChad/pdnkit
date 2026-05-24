@@ -1,3 +1,5 @@
+#include <unordered_map>
+
 #include "render/IrResultMesh.h"
 
 namespace pdnkit::render {
@@ -16,30 +18,48 @@ IrResultMesh build_ir_result_mesh(const pi::IrMesh& mesh,
     const double span = (out.v_max - out.v_min);
     const double inv_span = (span > 0.0) ? (1.0 / span) : 0.0;
 
+    // Group node indices by layer ordinal, preserving first-seen layer order.
+    std::vector<int> layer_order;
+    std::unordered_map<int, std::vector<std::size_t>> by_layer;
+    by_layer.reserve(8);
+    for (std::size_t i = 0; i < mesh.nodes.size(); ++i) {
+        const int ord = mesh.nodes[i].layer_ordinal;
+        auto [it, inserted] = by_layer.try_emplace(ord);
+        if (inserted) layer_order.push_back(ord);
+        it->second.push_back(i);
+    }
+
     out.vertices.reserve(mesh.nodes.size() * 12);  // 4 verts × 3 floats
     out.indices.reserve(mesh.nodes.size() * 6);    // 2 tris × 3 indices
 
     const float hs = static_cast<float>(0.5 * cell_size);
 
-    for (std::size_t i = 0; i < mesh.nodes.size(); ++i) {
-        const auto& n = mesh.nodes[i];
-        const float cx = static_cast<float>(n.x);
-        const float cy = static_cast<float>(n.y);
-        const double v = solution.voltages[i];
-        const float t = static_cast<float>((v - out.v_min) * inv_span);
+    for (int ord : layer_order) {
+        IrResultMesh::LayerRange range;
+        range.ordinal = ord;
+        range.index_start = static_cast<int>(out.indices.size());
 
-        const auto base = static_cast<std::uint32_t>(out.vertex_count());
+        for (std::size_t i : by_layer[ord]) {
+            const auto& n = mesh.nodes[i];
+            const float cx = static_cast<float>(n.x);
+            const float cy = static_cast<float>(n.y);
+            const double v = solution.voltages[i];
+            const float t = static_cast<float>((v - out.v_min) * inv_span);
+            const auto base = static_cast<std::uint32_t>(out.vertex_count());
 
-        // 4 corners (CCW): TL, TR, BR, BL.
-        out.vertices.insert(out.vertices.end(),
-                            {cx - hs, cy - hs, t,
-                             cx + hs, cy - hs, t,
-                             cx + hs, cy + hs, t,
-                             cx - hs, cy + hs, t});
+            out.vertices.insert(out.vertices.end(),
+                                {cx - hs, cy - hs, t,
+                                 cx + hs, cy - hs, t,
+                                 cx + hs, cy + hs, t,
+                                 cx - hs, cy + hs, t});
 
-        out.indices.insert(out.indices.end(),
-                           {base + 0, base + 1, base + 2,
-                            base + 0, base + 2, base + 3});
+            out.indices.insert(out.indices.end(),
+                               {base + 0, base + 1, base + 2,
+                                base + 0, base + 2, base + 3});
+        }
+
+        range.index_count = static_cast<int>(out.indices.size()) - range.index_start;
+        out.layer_ranges.push_back(range);
     }
 
     return out;

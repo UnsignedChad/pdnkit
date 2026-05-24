@@ -24,6 +24,15 @@ struct IrResultMesh {
     double v_min = 0.0;
     double v_max = 0.0;
 
+    // Index-range per copper layer so the renderer can skip hidden layers.
+    // Layers appear in first-seen order from the source IrMesh.
+    struct LayerRange {
+        int ordinal = 0;
+        int index_start = 0;
+        int index_count = 0;
+    };
+    std::vector<LayerRange> layer_ranges;
+
     std::size_t vertex_count() const noexcept { return vertices.size() / 3; }
 };
 

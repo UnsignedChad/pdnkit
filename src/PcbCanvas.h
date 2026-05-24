@@ -79,6 +79,7 @@ private:
     QOpenGLBuffer heat_ibo_{QOpenGLBuffer::IndexBuffer};
     QOpenGLVertexArrayObject heat_vao_;
     pdnkit::render::IrResultMesh pending_heat_;
+    std::vector<pdnkit::render::IrResultMesh::LayerRange> heat_layer_ranges_;
     int heat_index_count_ = 0;
     bool heat_dirty_ = false;
 
