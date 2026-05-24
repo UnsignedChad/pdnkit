@@ -1,9 +1,98 @@
+#include <cstdio>
+#include <cstdlib>
+#include <exception>
+#include <iostream>
+#include <string>
+
 #include <QApplication>
 #include <QSurfaceFormat>
 #include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
 
 #include "MainWindow.h"
+#include "parser/KicadPcbParser.h"
+#include "pi/IrMesher.h"
+#include "pi/IrSolver.h"
+
+namespace {
+
+// Headless analysis. Loads the board, finds (net, layer), runs the full
+// pipeline, prints a one-line result, returns exit code (0 = ok).
+int run_headless_analysis(const std::string& pcb_path,
+                          const std::string& net_name,
+                          const std::string& layer_name,
+                          double current,
+                          double cell_size_mm) {
+    pdnkit::model::Board board;
+    try {
+        board = pdnkit::parser::KicadPcbParser::parse_file(pcb_path);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "pdnkit: parse failed: %s\n", e.what());
+        return 2;
+    }
+
+    const auto* net = board.find_net_by_name(net_name);
+    if (!net) {
+        std::fprintf(stderr, "pdnkit: no net named '%s'. Available nets:\n",
+                     net_name.c_str());
+        for (const auto& n : board.nets) {
+            std::fprintf(stderr, "  #%d  %s\n", n.id, n.name.c_str());
+        }
+        return 3;
+    }
+
+    int layer_ord = -1;
+    for (const auto& L : board.stackup.layers) {
+        if (L.name == layer_name) {
+            layer_ord = L.ordinal;
+            break;
+        }
+    }
+    if (layer_ord < 0) {
+        std::fprintf(stderr, "pdnkit: no layer named '%s'. Available layers:\n",
+                     layer_name.c_str());
+        for (const auto& L : board.stackup.layers) {
+            std::fprintf(stderr, "  %3d  %s  (%s)\n", L.ordinal,
+                         L.name.c_str(), L.type.c_str());
+        }
+        return 4;
+    }
+
+    pdnkit::pi::MeshConfig mc;
+    mc.cell_size = cell_size_mm * 1.0e-3;
+    mc.net_id = net->id;
+    mc.layer_ordinal = layer_ord;
+    auto mesh = pdnkit::pi::IrMesher::build(board, mc);
+    if (mesh.nodes.empty()) {
+        std::fprintf(stderr,
+                     "pdnkit: mesher produced no nodes for net '%s' on '%s'\n",
+                     net_name.c_str(), layer_name.c_str());
+        return 5;
+    }
+    if (mesh.source_node_ids.empty() || mesh.sink_node_ids.empty()) {
+        std::fprintf(stderr,
+                     "pdnkit: need at least 2 pads on (net, layer) for "
+                     "source/sink (auto-pick failed)\n");
+        return 6;
+    }
+
+    auto sol = pdnkit::pi::IrSolver::solve(mesh, {current});
+    if (!sol.ok) {
+        std::fprintf(stderr, "pdnkit: solve failed: %s\n", sol.error.c_str());
+        return 7;
+    }
+
+    const double drop_mv = (sol.max_v - sol.min_v) * 1000.0;
+    std::printf("pdnkit IR drop  net=%s  layer=%s  current=%.3fA  "
+                "nodes=%zu  resistors=%zu  Vmax=%.6fmV  Vmin=%.6fmV  "
+                "drop=%.6fmV\n",
+                net_name.c_str(), layer_name.c_str(), current,
+                mesh.nodes.size(), mesh.resistors.size(),
+                sol.max_v * 1000.0, sol.min_v * 1000.0, drop_mv);
+    return 0;
+}
+
+}  // namespace
 
 int main(int argc, char** argv) {
     CLI::App cli{"pdnkit — open-source Power Integrity analysis for KiCad PCBs"};
@@ -14,10 +103,38 @@ int main(int argc, char** argv) {
                    "KiCad .kicad_pcb file to open on startup")
         ->check(CLI::ExistingFile);
 
+    bool analyze = false;
+    std::string analyze_net = "GND";
+    std::string analyze_layer = "F.Cu";
+    double analyze_current = 1.0;
+    double analyze_cell_mm = 0.5;
+    cli.add_flag("--analyze", analyze,
+                 "Run static IR-drop analysis headlessly and exit (no GUI). "
+                 "Requires --open <file>.");
+    cli.add_option("--net", analyze_net,
+                   "Net name to analyze (default: GND)");
+    cli.add_option("--layer", analyze_layer,
+                   "Layer name to analyze (default: F.Cu)");
+    cli.add_option("--current", analyze_current,
+                   "Total current to inject, Amperes (default: 1.0)");
+    cli.add_option("--cell-size", analyze_cell_mm,
+                   "Mesh cell size, millimeters (default: 0.5)");
+
     try {
         cli.parse(argc, argv);
     } catch (const CLI::ParseError& e) {
         return cli.exit(e);
+    }
+
+    if (analyze) {
+        if (pcb_path.empty()) {
+            std::fprintf(stderr,
+                         "pdnkit: --analyze requires a board file "
+                         "(--open <file> or positional)\n");
+            return 1;
+        }
+        return run_headless_analysis(pcb_path, analyze_net, analyze_layer,
+                                      analyze_current, analyze_cell_mm);
     }
 
     QSurfaceFormat fmt;
