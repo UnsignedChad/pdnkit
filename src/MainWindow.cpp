@@ -5,6 +5,9 @@
 #include <QDockWidget>
 #include <QCloseEvent>
 #include <QFile>
+#include <QMimeData>
+#include <QDropEvent>
+#include <QDragEnterEvent>
 #include <QFileDialog>
 #include <QSettings>
 #include <QHBoxLayout>
@@ -33,6 +36,7 @@
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("pdnkit");
     resize(1280, 800);
+    setAcceptDrops(true);
 
     canvas_ = new PcbCanvas(this);
     legend_ = new ColorLegend(this);
@@ -472,5 +476,33 @@ void MainWindow::onShortcutsDialog() {
         "<tr><td><b>Wheel</b></td><td>Zoom toward cursor</td></tr>"
         "<tr><td><b>Hover</b></td><td>Net + layer (+ voltage if heatmap)</td></tr>"
         "</table>");
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent* e) {
+    const QMimeData* m = e->mimeData();
+    if (!m->hasUrls()) return;
+    for (const QUrl& u : m->urls()) {
+        if (u.isLocalFile() && u.toLocalFile().endsWith(".kicad_pcb",
+                                                         Qt::CaseInsensitive)) {
+            e->acceptProposedAction();
+            return;
+        }
+    }
+}
+
+void MainWindow::dropEvent(QDropEvent* e) {
+    const QMimeData* m = e->mimeData();
+    if (!m->hasUrls()) return;
+    for (const QUrl& u : m->urls()) {
+        if (u.isLocalFile()) {
+            const QString p = u.toLocalFile();
+            if (p.endsWith(".kicad_pcb", Qt::CaseInsensitive)) {
+                if (loadKicadPcb(p)) {
+                    e->acceptProposedAction();
+                    return;
+                }
+            }
+        }
+    }
 }
 

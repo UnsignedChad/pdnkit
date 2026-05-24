@@ -29,6 +29,8 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* e) override;
+    void dragEnterEvent(QDragEnterEvent* e) override;
+    void dropEvent(QDropEvent* e) override;
 
 private slots:
     void onOpenKicadPcb();

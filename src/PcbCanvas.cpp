@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <QMatrix4x4>
+#include <QPainter>
 #include <QMouseEvent>
 #include <QVector4D>
 #include <QSettings>
@@ -541,6 +542,19 @@ void PcbCanvas::paintGL() {
         glDrawElements(GL_TRIANGLES, decap_index_count_, GL_UNSIGNED_INT, nullptr);
         decap_vao_.release();
         flat_prog_.release();
+    }
+
+    // Welcome overlay: shown when no board is loaded.
+    if (!board_) {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QColor(150, 160, 175));
+        QFont f = painter.font();
+        f.setPointSizeF(f.pointSizeF() + 6);
+        f.setBold(true);
+        painter.setFont(f);
+        painter.drawText(rect(), Qt::AlignCenter,
+            "Drop a .kicad_pcb file here\nor use File > Open KiCad PCB...");
     }
 
     // Cavity overlay: lazily upload, then draw rect + port markers.
