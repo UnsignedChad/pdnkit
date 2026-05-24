@@ -96,4 +96,11 @@
             (pts (xy 0.5 15.5) (xy 19.5 15.5) (xy 19.5 24.5) (xy 0.5 24.5))
         )
     )
+
+    (gr_line (start 0 15) (end 20 15) (layer "Edge.Cuts") (width 0.1))
+    (gr_line (start 20 15) (end 20 25) (layer "Edge.Cuts") (width 0.1))
+    (gr_line (start 20 25) (end 0 25) (layer "Edge.Cuts") (width 0.1))
+    (gr_line (start 0 25) (end 0 15) (layer "Edge.Cuts") (width 0.1))
+    (gr_arc (start 5 5) (mid 7 7) (end 9 5) (layer "Edge.Cuts") (width 0.1))
+    (gr_circle (center 15 8) (end 17 8) (layer "Edge.Cuts") (width 0.1))
 )

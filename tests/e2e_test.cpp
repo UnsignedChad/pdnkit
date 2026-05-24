@@ -92,3 +92,12 @@ TEST_CASE("e2e: IR drop on +3V3 F.Cu produces sane voltage map", "[e2e]") {
     REQUIRE(sol.min_v < 1e-6);        // sink pinned ~0
     REQUIRE(sol.max_v - sol.min_v > 0.0);
 }
+
+TEST_CASE("e2e: board outline parsed from Edge.Cuts", "[e2e]") {
+    auto b = KicadPcbParser::parse_file(fixture("tiny_pdn.kicad_pcb"));
+    // 4 rectangle lines + 24 arc segments + 48 circle segments = 76 outline lines.
+    REQUIRE(b.outline.size() == 76);
+    // First segment is the bottom rectangle edge from (0,15) to (20,15).
+    REQUIRE(b.outline[0].start.x == 0.0);
+    REQUIRE(b.outline[0].end.x == 0.020);
+}

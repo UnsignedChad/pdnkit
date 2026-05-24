@@ -49,6 +49,7 @@ protected:
 
 private:
     void buildGrid();
+    void buildOutline();
     void uploadBoardMeshes();
     void uploadIrResult();
 
@@ -67,6 +68,10 @@ private:
     QOpenGLBuffer grid_vbo_{QOpenGLBuffer::VertexBuffer};
     QOpenGLVertexArrayObject grid_vao_;
     int grid_vertex_count_ = 0;
+
+    QOpenGLBuffer outline_vbo_{QOpenGLBuffer::VertexBuffer};
+    QOpenGLVertexArrayObject outline_vao_;
+    int outline_vertex_count_ = 0;
 
     QOpenGLBuffer board_vbo_{QOpenGLBuffer::VertexBuffer};
     QOpenGLBuffer board_ibo_{QOpenGLBuffer::IndexBuffer};

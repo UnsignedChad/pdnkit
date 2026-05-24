@@ -97,6 +97,7 @@ void PcbCanvas::setBoard(const pdnkit::model::Board* board) {
         meshes_dirty_ = true;
         fitToBoard();
     }
+    buildOutline();
     update();
 }
 
@@ -159,6 +160,10 @@ void PcbCanvas::initializeGL() {
     grid_vbo_.create();
     buildGrid();
 
+    outline_vao_.create();
+    outline_vbo_.create();
+    // Outline geometry comes from the loaded board; setBoard triggers buildOutline.
+
     board_vao_.create();
     board_vbo_.create();
     board_ibo_.create();
@@ -218,6 +223,29 @@ void PcbCanvas::buildGrid() {
     flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
     grid_vbo_.release();
     grid_vao_.release();
+}
+
+void PcbCanvas::buildOutline() {
+    outline_vertex_count_ = 0;
+    if (!board_ || board_->outline.empty()) return;
+    std::vector<float> verts;
+    verts.reserve(board_->outline.size() * 4);
+    for (const auto& seg : board_->outline) {
+        verts.push_back(static_cast<float>(seg.start.x));
+        verts.push_back(static_cast<float>(seg.start.y));
+        verts.push_back(static_cast<float>(seg.end.x));
+        verts.push_back(static_cast<float>(seg.end.y));
+    }
+    outline_vertex_count_ = static_cast<int>(verts.size() / 2);
+
+    outline_vao_.bind();
+    outline_vbo_.bind();
+    outline_vbo_.allocate(verts.data(),
+                          static_cast<int>(verts.size() * sizeof(float)));
+    flat_prog_.enableAttributeArray(0);
+    flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+    outline_vbo_.release();
+    outline_vao_.release();
 }
 
 void PcbCanvas::uploadBoardMeshes() {
@@ -348,6 +376,13 @@ void PcbCanvas::paintGL() {
     grid_vao_.bind();
     glDrawArrays(GL_LINES, 0, grid_vertex_count_);
     grid_vao_.release();
+
+    if (outline_vertex_count_ > 0) {
+        flat_prog_.setUniformValue("u_color", QVector4D(0.85f, 0.85f, 0.88f, 1.0f));
+        outline_vao_.bind();
+        glDrawArrays(GL_LINES, 0, outline_vertex_count_);
+        outline_vao_.release();
+    }
 
     if (!layer_ranges_.empty()) {
         board_vao_.bind();

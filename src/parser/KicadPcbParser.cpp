@@ -90,6 +90,7 @@ public:
         parse_segments();
         parse_vias();
         parse_zones();
+        parse_outline();
         parse_footprints();
         return std::move(board_);
     }
@@ -216,6 +217,97 @@ private:
             }
 
             board_.zones.push_back(std::move(z));
+        }
+    }
+
+    void parse_outline() {
+        // KiCad represents the board edge with gr_line / gr_arc / gr_circle
+        // on the "Edge.Cuts" layer. We collect straight-line approximations.
+        auto on_edge_cuts = [](const Node& n) {
+            if (const Node* lay = find_child(n, "layer")) {
+                if (lay->children.size() >= 2 &&
+                    (lay->children[1].is_string() || lay->children[1].is_symbol()) &&
+                    lay->children[1].text == "Edge.Cuts") {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        for (const Node* ln : find_children(root_, "gr_line")) {
+            if (!on_edge_cuts(*ln)) continue;
+            model::OutlineSegment seg;
+            if (const Node* st = find_child(*ln, "start")) seg.start = read_xy_tail(*st);
+            if (const Node* en = find_child(*ln, "end"))   seg.end   = read_xy_tail(*en);
+            board_.outline.push_back(seg);
+        }
+        // gr_arc: (start, mid, end). Approximate as a polyline through ~24 points.
+        for (const Node* arc : find_children(root_, "gr_arc")) {
+            if (!on_edge_cuts(*arc)) continue;
+            const Node* st = find_child(*arc, "start");
+            const Node* mid = find_child(*arc, "mid");
+            const Node* en = find_child(*arc, "end");
+            if (!st || !mid || !en) continue;
+            const model::Point2 P0 = read_xy_tail(*st);
+            const model::Point2 P1 = read_xy_tail(*mid);
+            const model::Point2 P2 = read_xy_tail(*en);
+            // Fit a circle through 3 points: solve perpendicular bisector
+            // intersection. Bail out cleanly on collinear input.
+            const double ax = P1.x - P0.x, ay = P1.y - P0.y;
+            const double bx = P2.x - P1.x, by = P2.y - P1.y;
+            const double d = 2.0 * (ax * by - ay * bx);
+            if (std::abs(d) < 1.0e-18) {
+                model::OutlineSegment seg{P0, P2};
+                board_.outline.push_back(seg);
+                continue;
+            }
+            const double aa = P0.x * P0.x + P0.y * P0.y;
+            const double bb = P1.x * P1.x + P1.y * P1.y;
+            const double cc = P2.x * P2.x + P2.y * P2.y;
+            const double cx = ((bb - aa) * by - (cc - bb) * ay) / d;
+            const double cy = ((cc - bb) * ax - (bb - aa) * bx) / d;
+            const double r = std::hypot(P0.x - cx, P0.y - cy);
+            double a0 = std::atan2(P0.y - cy, P0.x - cx);
+            double a1 = std::atan2(P1.y - cy, P1.x - cx);
+            double a2 = std::atan2(P2.y - cy, P2.x - cx);
+            // Sweep direction: pick the way that passes through a1.
+            auto wrap = [](double a) {
+                while (a > 3.141592653589793)  a -= 2.0 * 3.141592653589793;
+                while (a < -3.141592653589793) a += 2.0 * 3.141592653589793;
+                return a;
+            };
+            double da_ccw = wrap(a2 - a0);
+            if (da_ccw <= 0.0) da_ccw += 2.0 * 3.141592653589793;
+            double da_cw = da_ccw - 2.0 * 3.141592653589793;
+            double mid_offset_ccw = std::abs(wrap(a1 - (a0 + 0.5 * da_ccw)));
+            double mid_offset_cw  = std::abs(wrap(a1 - (a0 + 0.5 * da_cw)));
+            const double sweep = (mid_offset_ccw < mid_offset_cw) ? da_ccw : da_cw;
+            constexpr int N = 24;
+            model::Point2 prev = P0;
+            for (int i = 1; i <= N; ++i) {
+                const double a = a0 + sweep * (static_cast<double>(i) / N);
+                const model::Point2 p{cx + r * std::cos(a), cy + r * std::sin(a)};
+                board_.outline.push_back({prev, p});
+                prev = p;
+            }
+        }
+        // gr_circle: approximate as 48-sided polygon outline.
+        for (const Node* circ : find_children(root_, "gr_circle")) {
+            if (!on_edge_cuts(*circ)) continue;
+            const Node* cn = find_child(*circ, "center");
+            const Node* en = find_child(*circ, "end");
+            if (!cn || !en) continue;
+            const model::Point2 C = read_xy_tail(*cn);
+            const model::Point2 E = read_xy_tail(*en);
+            const double r = std::hypot(E.x - C.x, E.y - C.y);
+            constexpr int N = 48;
+            model::Point2 prev{C.x + r, C.y};
+            for (int i = 1; i <= N; ++i) {
+                const double a = 2.0 * 3.141592653589793 * static_cast<double>(i) / N;
+                const model::Point2 p{C.x + r * std::cos(a), C.y + r * std::sin(a)};
+                board_.outline.push_back({prev, p});
+                prev = p;
+            }
         }
     }
 

@@ -97,6 +97,13 @@ struct Zone {
     std::vector<Polygon> filled;
 };
 
+// Line segment on the board outline (Edge.Cuts layer). Arcs are converted
+// to polylines at parse time so the renderer only needs straight segments.
+struct OutlineSegment {
+    Point2 start;
+    Point2 end;
+};
+
 struct Board {
     Stackup stackup;
     std::vector<Net> nets;
@@ -104,6 +111,7 @@ struct Board {
     std::vector<Via> vias;
     std::vector<Pad> pads;
     std::vector<Zone> zones;
+    std::vector<OutlineSegment> outline;
 
     const Net* find_net(int id) const noexcept {
         auto it = std::find_if(nets.begin(), nets.end(),
