@@ -45,6 +45,7 @@ add_library(pdnkit_core STATIC
     src/model/HitTest.cpp
     src/pi/IrMesher.cpp
     src/pi/IrSolver.cpp
+    src/pi/CavityModel.cpp
     src/render/Camera2D.cpp
     src/render/ZoneMesher.cpp
     src/render/IrResultMesh.cpp
