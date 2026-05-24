@@ -1,6 +1,8 @@
+#include "pi/CavityModel.h"
 #include "pi/Transient.h"
 
 #include <algorithm>
+#include <limits>
 #include <cmath>
 
 #include <Eigen/SparseCholesky>
@@ -18,8 +20,17 @@ TransientResult solve_step_transient(const IrMesh& mesh,
     const int N = static_cast<int>(mesh.nodes.size());
 
     if (N == 0) { out.error = "empty mesh"; return out; }
-    if (cfg.n_steps < 1 || cfg.dt <= 0.0 || cfg.per_node_capacitance <= 0.0) {
-        out.error = "invalid TransientConfig (need n_steps>=1, dt>0, C>0)";
+    if (cfg.n_steps < 1 || cfg.dt <= 0.0) {
+        out.error = "invalid TransientConfig (need n_steps>=1, dt>0)";
+        return out;
+    }
+    const bool have_vec = !cfg.per_node_capacitances.empty();
+    if (have_vec && static_cast<int>(cfg.per_node_capacitances.size()) != N) {
+        out.error = "per_node_capacitances size != mesh node count";
+        return out;
+    }
+    if (!have_vec && cfg.per_node_capacitance <= 0.0) {
+        out.error = "no per-node capacitance supplied (need vector or scalar > 0)";
         return out;
     }
     if (mesh.source_node_ids.empty()) {
@@ -33,7 +44,13 @@ TransientResult solve_step_transient(const IrMesh& mesh,
 
     // Build G (sparse conductance) + C/dt diagonal + sink pin diagonal.
     constexpr double kPinStiffness = 1.0e15;
-    const double c_over_dt = cfg.per_node_capacitance / cfg.dt;
+    // Per-node C/dt vector. Uniform fallback when no vector was supplied.
+    std::vector<double> c_over_dt(N);
+    for (int i = 0; i < N; ++i) {
+        const double ci = have_vec ? cfg.per_node_capacitances[i]
+                                    : cfg.per_node_capacitance;
+        c_over_dt[i] = ci / cfg.dt;
+    }
 
     std::vector<Eigen::Triplet<double>> triplets;
     triplets.reserve(4 * mesh.resistors.size() + 2 * N);
@@ -46,7 +63,7 @@ TransientResult solve_step_transient(const IrMesh& mesh,
         triplets.emplace_back(r.from_node, r.to_node,   -r.conductance);
         triplets.emplace_back(r.to_node,   r.from_node, -r.conductance);
     }
-    for (int i = 0; i < N; ++i) triplets.emplace_back(i, i, c_over_dt);
+    for (int i = 0; i < N; ++i) triplets.emplace_back(i, i, c_over_dt[i]);
     for (int s : mesh.sink_node_ids) {
         if (s >= 0 && s < N) triplets.emplace_back(s, s, kPinStiffness);
     }
@@ -85,8 +102,10 @@ TransientResult solve_step_transient(const IrMesh& mesh,
 
     for (int k = 0; k < cfg.n_steps; ++k) {
         const double t = (k + 1) * cfg.dt;
-        // RHS = C/dt * v_prev + (step on if t >= t_zero_step).
-        Eigen::VectorXd rhs = c_over_dt * v;
+        // RHS = C/dt * v_prev + (step on if t >= t_zero_step). Element-wise
+        // multiply by the per-node C/dt vector.
+        Eigen::VectorXd rhs(N);
+        for (int i = 0; i < N; ++i) rhs[i] = c_over_dt[i] * v[i];
         if (t >= cfg.t_zero_step) rhs += i_step;
 
         v = solver.solve(rhs);
@@ -101,6 +120,40 @@ TransientResult solve_step_transient(const IrMesh& mesh,
 
     out.ok = true;
     return out;
+}
+
+
+
+std::vector<double> build_distributed_capacitance(
+    const IrMesh& mesh,
+    double cell_size,
+    double eps_r,
+    double substrate_thickness_m,
+    const std::vector<Decap>& decaps) {
+    constexpr double kEps0 = 8.854187817e-12;
+    const int N = static_cast<int>(mesh.nodes.size());
+    std::vector<double> c(N, 0.0);
+    if (N == 0 || cell_size <= 0.0 || eps_r <= 0.0 || substrate_thickness_m <= 0.0) {
+        return c;
+    }
+    const double cell_area = cell_size * cell_size;
+    const double c_cell = eps_r * kEps0 * cell_area / substrate_thickness_m;
+    for (int i = 0; i < N; ++i) c[i] = c_cell;
+
+    // Lump each decap onto the nearest node.
+    for (const auto& d : decaps) {
+        if (d.C <= 0.0) continue;
+        int best = -1;
+        double best_d2 = std::numeric_limits<double>::infinity();
+        for (int i = 0; i < N; ++i) {
+            const double dx = mesh.nodes[i].x - d.x;
+            const double dy = mesh.nodes[i].y - d.y;
+            const double d2 = dx * dx + dy * dy;
+            if (d2 < best_d2) { best_d2 = d2; best = i; }
+        }
+        if (best >= 0) c[best] += d.C;
+    }
+    return c;
 }
 
 }  // namespace pdnkit::pi

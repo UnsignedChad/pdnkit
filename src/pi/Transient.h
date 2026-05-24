@@ -22,14 +22,19 @@
 #include <string>
 #include <vector>
 
+#include "pi/CavityModel.h"
 #include "pi/IrMesher.h"
 
 namespace pdnkit::pi {
 
 struct TransientConfig {
-    // Capacitance per mesh node, in Farads. v0 ships with a uniform value
-    // -- a follow-up will derive this from the plane pair (eps_r, d, cell_area)
-    // and the decap table.
+    // Per-node capacitance in Farads. Two ways to supply it:
+    //   * per_node_capacitances (preferred) -- one entry per mesh node,
+    //     letting the caller bake in plane-pair distributed C + lumped decap C.
+    //   * per_node_capacitance (fallback)   -- uniform value applied to every
+    //     node if the vector is empty. Useful for quick tests / hand-built
+    //     meshes without a real stackup.
+    std::vector<double> per_node_capacitances;
     double per_node_capacitance = 1.0e-12;
     double dt = 1.0e-9;          // timestep (s); pick smaller for fast transients
     int    n_steps = 1000;       // length of the simulation
@@ -51,5 +56,18 @@ struct TransientResult {
 
 TransientResult solve_step_transient(const IrMesh& mesh,
                                       const TransientConfig& cfg);
+
+// Build a per-node capacitance vector from physical inputs:
+//   * plane-pair distributed C:  eps_r * eps_0 * cell_area / substrate_thickness
+//     contributed to every copper mesh node.
+//   * lumped decap C:            each decap's C added to the single mesh node
+//     nearest to its (x, y).
+// Returns one C value per node, ready to drop into TransientConfig.
+std::vector<double> build_distributed_capacitance(
+    const IrMesh& mesh,
+    double cell_size,
+    double eps_r,
+    double substrate_thickness_m,
+    const std::vector<Decap>& decaps);
 
 }  // namespace pdnkit::pi

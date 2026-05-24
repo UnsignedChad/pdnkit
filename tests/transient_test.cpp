@@ -108,3 +108,50 @@ TEST_CASE("transient: asymptotic value matches static IR drop", "[transient]") {
     // Should converge to I*R = 1mV.
     REQUIRE(v_final == Approx(R).epsilon(0.01));
 }
+
+TEST_CASE("transient: per-node C vector overrides scalar", "[transient]") {
+    const double G = 1000.0;
+    auto mesh = two_node_rc(G);
+
+    TransientConfig cfg;
+    cfg.per_node_capacitance = 1.0e-15;  // tiny scalar (ignored)
+    cfg.per_node_capacitances = {1.0e-6, 1.0e-6};
+    cfg.dt = 10.0e-9;
+    cfg.n_steps = 600;
+    cfg.step_current = 1.0;
+
+    auto res = solve_step_transient(mesh, cfg);
+    REQUIRE(res.ok);
+    REQUIRE(res.obs_v.back() == Approx(0.001).epsilon(0.01));
+}
+
+TEST_CASE("transient: per-node vector wrong length is an error", "[transient]") {
+    auto mesh = two_node_rc(1000.0);
+    TransientConfig cfg;
+    cfg.per_node_capacitances = {1.0e-6};  // wrong size (mesh has 2 nodes)
+    auto res = solve_step_transient(mesh, cfg);
+    REQUIRE_FALSE(res.ok);
+}
+
+TEST_CASE("transient: distributed C builder gives plane-pair value per cell", "[transient]") {
+    auto mesh = two_node_rc(1000.0);
+    // 0.5mm cells, FR-4 eps_r 4.3, 1.6mm board:
+    // C_cell = 4.3 * 8.854e-12 * (0.5e-3)^2 / 1.6e-3
+    //        = 4.3 * 8.854e-12 * 2.5e-7 / 1.6e-3
+    //        ~= 5.95e-15 F per cell.
+    auto c = pdnkit::pi::build_distributed_capacitance(
+        mesh, 0.5e-3, 4.3, 1.6e-3, {});
+    REQUIRE(c.size() == 2);
+    REQUIRE(c[0] == Approx(5.95e-15).epsilon(0.05));
+    REQUIRE(c[1] == Approx(5.95e-15).epsilon(0.05));
+}
+
+TEST_CASE("transient: decap C lumps onto nearest node", "[transient]") {
+    auto mesh = two_node_rc(1000.0);
+    pdnkit::pi::Decap d{0.001, 0.0, 1.0e-6, 0.005, 0.5e-9};  // near node 1
+    auto c = pdnkit::pi::build_distributed_capacitance(
+        mesh, 0.5e-3, 4.3, 1.6e-3, {d});
+    // Node 1 picks up the lumped decap C.
+    REQUIRE(c[1] > 0.5e-6);
+    REQUIRE(c[0] < 1e-9);
+}
