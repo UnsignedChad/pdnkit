@@ -29,8 +29,10 @@ add_library(pdnkit_core STATIC
     src/sexpr/SExpr.cpp
     src/parser/KicadPcbParser.cpp
     src/render/Camera2D.cpp
+    src/render/ZoneMesher.cpp
 )
 target_include_directories(pdnkit_core PUBLIC src)
+target_include_directories(pdnkit_core PUBLIC third_party)
 target_link_libraries(pdnkit_core PUBLIC
     Eigen3::Eigen
     spdlog::spdlog

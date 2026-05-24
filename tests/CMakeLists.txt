@@ -7,6 +7,7 @@ add_executable(pdnkit_tests
     model_test.cpp
     parser_test.cpp
     camera_test.cpp
+    zone_mesher_test.cpp
 )
 
 target_link_libraries(pdnkit_tests PRIVATE
