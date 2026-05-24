@@ -236,6 +236,85 @@ int run_headless_list_layers(const std::string& pcb_path) {
     return 0;
 }
 
+int run_headless_probe_r(const std::string& pcb_path,
+                         const std::string& net_name,
+                         const std::string& layer_name,
+                         const std::string& pad_a,
+                         const std::string& pad_b,
+                         double cell_size_mm) {
+    pdnkit::model::Board board;
+    try {
+        board = pdnkit::parser::KicadPcbParser::parse_file(pcb_path);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "pdnkit: parse failed: %s\n", e.what());
+        return 2;
+    }
+    const auto* net = board.find_net_by_name(net_name);
+    if (!net) {
+        std::fprintf(stderr, "pdnkit: no net named '%s'\n", net_name.c_str());
+        return 3;
+    }
+    int layer_ord = -1;
+    for (const auto& L : board.stackup.layers) {
+        if (L.name == layer_name) { layer_ord = L.ordinal; break; }
+    }
+    if (layer_ord < 0) {
+        std::fprintf(stderr, "pdnkit: no layer named '%s'\n", layer_name.c_str());
+        return 4;
+    }
+
+    pdnkit::pi::MeshConfig mc;
+    mc.cell_size = cell_size_mm * 1.0e-3;
+    mc.net_id = net->id;
+    mc.layer_ordinal = layer_ord;
+    mc.source_pad_names = {pad_a};
+    mc.sink_pad_names   = {pad_b};
+
+    auto mesh = pdnkit::pi::IrMesher::build(board, mc);
+    if (mesh.nodes.empty()) {
+        std::fprintf(stderr, "pdnkit: mesher produced no nodes\n");
+        return 5;
+    }
+    if (mesh.source_node_ids.empty()) {
+        std::fprintf(stderr, "pdnkit: pad '%s' did not attach to any mesh node\n",
+                     pad_a.c_str());
+        return 6;
+    }
+    if (mesh.sink_node_ids.empty()) {
+        std::fprintf(stderr, "pdnkit: pad '%s' did not attach to any mesh node\n",
+                     pad_b.c_str());
+        return 6;
+    }
+
+    auto sol = pdnkit::pi::IrSolver::solve(mesh, {1.0});
+    if (!sol.ok) {
+        std::fprintf(stderr, "pdnkit: solve failed: %s\n", sol.error.c_str());
+        return 7;
+    }
+
+    // Effective R = (V_source - V_sink) / I_total at 1 A injection.
+    // With edge-contact, source/sink lists hold multiple nodes; average V
+    // across each set.
+    auto avg_v = [&](const std::vector<int>& ids) {
+        double s = 0.0;
+        for (int id : ids) {
+            if (id >= 0 && id < static_cast<int>(sol.voltages.size()))
+                s += sol.voltages[id];
+        }
+        return s / static_cast<double>(ids.size());
+    };
+    const double v_src = avg_v(mesh.source_node_ids);
+    const double v_snk = avg_v(mesh.sink_node_ids);
+    const double r_eff = v_src - v_snk;
+
+    std::printf("pdnkit R-probe  net=%s  layer=%s  "
+                "pad_a=%s pad_b=%s  R_eff=%.6e ohm  (%.4f m-ohm)\n",
+                net_name.c_str(), layer_name.c_str(),
+                pad_a.c_str(), pad_b.c_str(),
+                r_eff, r_eff * 1000.0);
+    return 0;
+}
+
 int run_headless_transient(const std::string& pcb_path,
                            const std::string& net_name,
                            const std::string& layer_name,
@@ -362,6 +441,14 @@ int main(int argc, char** argv) {
                  "Print the layer stackup as CSV "
                  "(ordinal,name,type,is_copper,thickness_um) and exit.");
 
+    bool probe_r = false;
+    std::string probe_pad_a, probe_pad_b;
+    cli.add_flag("--probe-r", probe_r,
+                 "Print effective resistance between --pad-a and --pad-b "
+                 "on --net at --layer. 1 A injection.");
+    cli.add_option("--pad-a", probe_pad_a, "Source pad name for --probe-r");
+    cli.add_option("--pad-b", probe_pad_b, "Sink pad name for --probe-r");
+
     bool transient = false;
     double trn_dt_ns = 10.0;
     int trn_steps = 1000;
@@ -430,6 +517,15 @@ int main(int argc, char** argv) {
                                zf_p1x, zf_p1y, zf_p2x, zf_p2y,
                                zf_eps_r, zf_tan_delta, zf_thickness_mm,
                                zf_f_min, zf_f_max, zf_points, zf_modes);
+    }
+    if (probe_r) {
+        if (pcb_path.empty() || probe_pad_a.empty() || probe_pad_b.empty()) {
+            std::fprintf(stderr, "pdnkit: --probe-r requires --pad-a, --pad-b, "
+                                 "and a board file\n");
+            return 1;
+        }
+        return run_headless_probe_r(pcb_path, analyze_net, analyze_layer,
+                                     probe_pad_a, probe_pad_b, analyze_cell_mm);
     }
     if (transient) {
         if (pcb_path.empty()) {
