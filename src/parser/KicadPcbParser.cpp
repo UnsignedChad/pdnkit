@@ -250,8 +250,18 @@ private:
                 }
                 if (const Node* lay = find_child(*pad, "layers")) {
                     for (const auto& name : read_layer_names(*lay)) {
-                        // Wildcard layers like "*.Cu" we skip — they expand to all copper
-                        // layers, which we'd materialize in a follow-up commit.
+                        if (name == "*.Cu") {
+                            // Wildcard expands to every copper layer in the stackup
+                            // (typical for through-hole pad layer lists).
+                            for (const auto& L : board_.stackup.layers) {
+                                if (L.is_copper()) p.layer_ordinals.push_back(L.ordinal);
+                            }
+                            continue;
+                        }
+                        // Other wildcards (*.Mask, F.*, etc.) are not copper layers
+                        // and don't matter for PI analysis — skip silently.
+                        if (name.find('*') != std::string::npos) continue;
+
                         auto it = layer_name_to_id_.find(name);
                         if (it != layer_name_to_id_.end()) {
                             p.layer_ordinals.push_back(it->second);
