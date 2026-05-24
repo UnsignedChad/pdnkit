@@ -26,8 +26,12 @@ struct Layer {
     std::string type;          // 'signal', 'power', 'mixed', 'jumper', 'user'
 
     bool is_copper() const noexcept {
-        // KiCad copper layers occupy 0..31 inclusive.
-        return ordinal >= 0 && ordinal <= 31;
+        // KiCad copper layer types: signal / power / mixed / jumper.
+        // Using type rather than ordinal range -- v10 reshuffled the layer
+        // numbering so the old ordinal<=31 heuristic falsely matched mask
+        // and silkscreen.
+        return type == "signal" || type == "power" ||
+               type == "mixed"  || type == "jumper";
     }
 };
 

@@ -104,6 +104,26 @@ private:
         return it->second;
     }
 
+    // Read a (net X) form's payload. Accepts integer ID (older KiCad) or
+    // string net name (KiCad master ~v9-pre). Returns 0 for an unknown net
+    // rather than failing -- segments referencing a stripped net should not
+    // crash the load.
+    int net_id_(const Node& netr) {
+        if (netr.children.size() < 2) return 0;
+        const Node& v = netr.children[1];
+        if (v.is_number()) return static_cast<int>(v.number);
+        if (v.is_string() || v.is_symbol()) {
+            if (const auto* n = board_.find_net_by_name(v.text)) return n->id;
+            // Auto-create -- modern KiCad files may have no explicit net table.
+            model::Net created;
+            created.id = static_cast<int>(board_.nets.size());
+            created.name = v.text;
+            board_.nets.push_back(created);
+            return created.id;
+        }
+        return 0;
+    }
+
     void parse_general() {
         if (const Node* g = find_child(root_, "general")) {
             if (const Node* t = find_child(*g, "thickness")) {
@@ -153,7 +173,7 @@ private:
                 if (names.empty()) fail(*lay, "segment missing layer name");
                 s.layer_ordinal = layer_id_(names[0], *lay);
             }
-            if (const Node* netr  = find_child(*segn, "net"))   s.net_id = static_cast<int>(expect_number(netr->children.at(1)));
+            if (const Node* netr  = find_child(*segn, "net"))   s.net_id = net_id_(*netr);
             board_.segments.push_back(s);
         }
     }
@@ -170,7 +190,7 @@ private:
                 v.from_layer = layer_id_(names[0], *lay);
                 v.to_layer   = layer_id_(names[1], *lay);
             }
-            if (const Node* netr  = find_child(*vn, "net")) v.net_id = static_cast<int>(expect_number(netr->children.at(1)));
+            if (const Node* netr  = find_child(*vn, "net")) v.net_id = net_id_(*netr);
             board_.vias.push_back(v);
         }
     }
@@ -189,7 +209,7 @@ private:
     void parse_zones() {
         for (const Node* zn : find_children(root_, "zone")) {
             model::Zone z;
-            if (const Node* netr  = find_child(*zn, "net"))      z.net_id = static_cast<int>(expect_number(netr->children.at(1)));
+            if (const Node* netr  = find_child(*zn, "net"))      z.net_id = net_id_(*netr);
             if (const Node* nm    = find_child(*zn, "net_name")) z.net_name = std::string(expect_string_or_symbol(nm->children.at(1)));
             // Modern KiCad uses (layer "F.Cu") for single-layer zones, (layers ...) for multi.
             if (const Node* lay   = find_child(*zn, "layer")) {
@@ -377,7 +397,7 @@ private:
                 }
                 if (const Node* netr = find_child(*pad, "net")) {
                     if (netr->children.size() >= 2) {
-                        p.net_id = static_cast<int>(expect_number(netr->children[1]));
+                        p.net_id = net_id_(*netr);
                     }
                 }
                 board_.pads.push_back(p);

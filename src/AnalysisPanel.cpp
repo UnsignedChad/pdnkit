@@ -211,13 +211,16 @@ void AnalysisPanel::rebuildPadTable() {
         spin->setDecimals(3);
         spin->setSingleStep(10.0);
         spin->setSuffix(" mA");
-        // Default seed: first row = +default, last row = -default, others 0.
+        // Default seed: first row = +default current source.
+        // All other rows share the -default sink current evenly so the sum is
+        // always zero -- works for any pad count, not just 2.
         double seed = 0.0;
-        if (rows.size() >= 2) {
+        const int n = static_cast<int>(rows.size());
+        if (n >= 2) {
             if (i == 0) seed = default_mA;
-            else if (i == static_cast<int>(rows.size()) - 1) seed = -default_mA;
-        } else if (i == 0 && rows.size() == 1) {
-            seed = default_mA;  // pathological; user will balance manually
+            else        seed = -default_mA / static_cast<double>(n - 1);
+        } else if (n == 1 && i == 0) {
+            seed = default_mA;  // pathological single-pad net
         }
         spin->setValue(seed);
         pad_table_->setCellWidget(i, 2, spin);
@@ -231,9 +234,12 @@ void AnalysisPanel::onAutoBalance() {
     for (int i = 0; i < n; ++i) {
         auto* s = row_spin(pad_table_, i);
         if (!s) continue;
-        if (n >= 2 && i == 0) s->setValue(default_mA);
-        else if (n >= 2 && i == n - 1) s->setValue(-default_mA);
-        else s->setValue(0.0);
+        if (n >= 2) {
+            if (i == 0) s->setValue(default_mA);
+            else        s->setValue(-default_mA / static_cast<double>(n - 1));
+        } else {
+            s->setValue(default_mA);
+        }
     }
 }
 
