@@ -62,6 +62,27 @@ IrResultMesh build_ir_result_mesh(const pi::IrMesh& mesh,
         out.layer_ranges.push_back(range);
     }
 
+    // Markers: prefer the per-node currents (multi-pad case); fall back to
+    // source/sink lists with synthetic +/-1 (the v0 split-current case).
+    if (!mesh.node_currents.empty()) {
+        for (const auto& [nid, cur] : mesh.node_currents) {
+            if (nid < 0 || nid >= static_cast<int>(mesh.nodes.size())) continue;
+            const auto& n = mesh.nodes[nid];
+            out.markers.push_back({n.x, n.y, cur});
+        }
+    } else {
+        for (int nid : mesh.source_node_ids) {
+            if (nid < 0 || nid >= static_cast<int>(mesh.nodes.size())) continue;
+            const auto& n = mesh.nodes[nid];
+            out.markers.push_back({n.x, n.y, +1.0});
+        }
+        for (int nid : mesh.sink_node_ids) {
+            if (nid < 0 || nid >= static_cast<int>(mesh.nodes.size())) continue;
+            const auto& n = mesh.nodes[nid];
+            out.markers.push_back({n.x, n.y, -1.0});
+        }
+    }
+
     return out;
 }
 

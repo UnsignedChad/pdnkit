@@ -83,6 +83,15 @@ private:
     int heat_index_count_ = 0;
     bool heat_dirty_ = false;
 
+    // Marker overlay for sources/sinks (rendered with flat shader after heat).
+    QOpenGLBuffer marker_vbo_{QOpenGLBuffer::VertexBuffer};
+    QOpenGLBuffer marker_ibo_{QOpenGLBuffer::IndexBuffer};
+    QOpenGLVertexArrayObject marker_vao_;
+    int marker_source_index_start_ = 0;
+    int marker_source_index_count_ = 0;
+    int marker_sink_index_start_ = 0;
+    int marker_sink_index_count_ = 0;
+
     std::unordered_map<int, bool> layer_visible_;
 
     bool panning_ = false;

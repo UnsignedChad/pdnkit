@@ -33,6 +33,14 @@ struct IrResultMesh {
     };
     std::vector<LayerRange> layer_ranges;
 
+    // Source/sink markers shown over the heat-map.
+    struct Marker {
+        double x = 0.0;
+        double y = 0.0;
+        double current = 0.0;  // >0 source, <0 sink
+    };
+    std::vector<Marker> markers;
+
     std::size_t vertex_count() const noexcept { return vertices.size() / 3; }
 };
 

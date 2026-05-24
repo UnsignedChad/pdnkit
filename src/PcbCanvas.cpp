@@ -11,6 +11,7 @@
 #include <QWheelEvent>
 
 #include "model/HitTest.h"
+#include "render/CircleHelper.h"
 #include "render/LayerColors.h"
 
 namespace {
@@ -64,7 +65,7 @@ vec3 viridis(float t) {
     return mix(c3, c4, (t - 0.75) * 4.0);
 }
 void main() {
-    frag_color = vec4(viridis(v_t), 0.90);
+    frag_color = vec4(viridis(v_t), 0.65);
 }
 )";
 
@@ -185,6 +186,18 @@ void PcbCanvas::initializeGL() {
     heat_vao_.release();
     heat_vbo_.release();
     heat_ibo_.release();
+
+    marker_vao_.create();
+    marker_vbo_.create();
+    marker_ibo_.create();
+    marker_vao_.bind();
+    marker_vbo_.bind();
+    marker_ibo_.bind();
+    flat_prog_.enableAttributeArray(0);
+    flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+    marker_vao_.release();
+    marker_vbo_.release();
+    marker_ibo_.release();
 }
 
 void PcbCanvas::buildGrid() {
@@ -253,6 +266,42 @@ void PcbCanvas::uploadBoardMeshes() {
 void PcbCanvas::uploadIrResult() {
     heat_index_count_ = static_cast<int>(pending_heat_.indices.size());
     heat_layer_ranges_ = pending_heat_.layer_ranges;
+
+    // Build marker geometry: small filled disks at each source/sink position.
+    // The radius is in world units; choose ~3 cells worth so they stay
+    // visible at typical zooms.
+    {
+        pdnkit::render::LayerMesh src_mesh, snk_mesh;
+        const double r = 0.5e-3;  // 0.5mm marker radius
+        for (const auto& m : pending_heat_.markers) {
+            if (m.current > 0.0)      pdnkit::render::append_disk(src_mesh, m.x, m.y, r, 24);
+            else if (m.current < 0.0) pdnkit::render::append_disk(snk_mesh, m.x, m.y, r, 24);
+        }
+        std::vector<float> verts;
+        std::vector<std::uint32_t> idx;
+        marker_source_index_start_ = 0;
+        marker_source_index_count_ = static_cast<int>(src_mesh.indices.size());
+        for (auto v : src_mesh.vertices) verts.push_back(v);
+        for (auto i : src_mesh.indices)  idx.push_back(i);
+        const std::uint32_t snk_vbase = static_cast<std::uint32_t>(src_mesh.vertex_count());
+        marker_sink_index_start_ = marker_source_index_count_;
+        marker_sink_index_count_ = static_cast<int>(snk_mesh.indices.size());
+        for (auto v : snk_mesh.vertices) verts.push_back(v);
+        for (auto i : snk_mesh.indices)  idx.push_back(snk_vbase + i);
+
+        marker_vao_.bind();
+        marker_vbo_.bind();
+        marker_vbo_.allocate(verts.data(),
+            static_cast<int>(verts.size() * sizeof(float)));
+        marker_ibo_.bind();
+        marker_ibo_.allocate(idx.data(),
+            static_cast<int>(idx.size() * sizeof(std::uint32_t)));
+        flat_prog_.enableAttributeArray(0);
+        flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+        marker_vao_.release();
+        marker_vbo_.release();
+        marker_ibo_.release();
+    }
 
     heat_vao_.bind();
     heat_vbo_.bind();
@@ -339,6 +388,30 @@ void PcbCanvas::paintGL() {
         }
         heat_vao_.release();
         heat_prog_.release();
+    }
+
+    // Markers: bright source = lime green, sink = red, drawn opaque over the
+    // heat-map so the user can see where current is injected/drawn.
+    if (marker_source_index_count_ > 0 || marker_sink_index_count_ > 0) {
+        flat_prog_.bind();
+        flat_prog_.setUniformValue("u_proj", proj);
+        marker_vao_.bind();
+        if (marker_source_index_count_ > 0) {
+            flat_prog_.setUniformValue("u_color", QVector4D(0.20f, 0.95f, 0.30f, 1.0f));
+            glDrawElements(GL_TRIANGLES, marker_source_index_count_, GL_UNSIGNED_INT,
+                           reinterpret_cast<const void*>(
+                               static_cast<std::uintptr_t>(
+                                   marker_source_index_start_ * sizeof(std::uint32_t))));
+        }
+        if (marker_sink_index_count_ > 0) {
+            flat_prog_.setUniformValue("u_color", QVector4D(0.95f, 0.20f, 0.20f, 1.0f));
+            glDrawElements(GL_TRIANGLES, marker_sink_index_count_, GL_UNSIGNED_INT,
+                           reinterpret_cast<const void*>(
+                               static_cast<std::uintptr_t>(
+                                   marker_sink_index_start_ * sizeof(std::uint32_t))));
+        }
+        marker_vao_.release();
+        flat_prog_.release();
     }
 }
 
