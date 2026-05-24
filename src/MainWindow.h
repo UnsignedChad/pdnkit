@@ -6,6 +6,7 @@
 #include "model/Board.h"
 
 class PcbCanvas;
+class LayerPanel;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -20,6 +21,9 @@ private slots:
     void onOpenKicadPcb();
 
 private:
+    void populateLayerPanel();
+
     PcbCanvas* canvas_;
+    LayerPanel* layer_panel_;
     std::unique_ptr<pdnkit::model::Board> board_;
 };

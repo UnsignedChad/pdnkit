@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMenuBar>
@@ -9,6 +10,7 @@
 #include <QStatusBar>
 #include <spdlog/spdlog.h>
 
+#include "LayerPanel.h"
 #include "PcbCanvas.h"
 #include "parser/KicadPcbParser.h"
 
@@ -19,12 +21,27 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     canvas_ = new PcbCanvas(this);
     setCentralWidget(canvas_);
 
+    // Layer-visibility dock panel on the right.
+    layer_panel_ = new LayerPanel(this);
+    auto* dock = new QDockWidget("Layers", this);
+    dock->setWidget(layer_panel_);
+    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    addDockWidget(Qt::RightDockWidgetArea, dock);
+    connect(layer_panel_, &LayerPanel::visibility_changed,
+            canvas_, &PcbCanvas::setLayerVisibility);
+
     auto* fileMenu = menuBar()->addMenu("&File");
     auto* openAct = fileMenu->addAction("&Open KiCad PCB...");
     openAct->setShortcut(QKeySequence::Open);
     connect(openAct, &QAction::triggered, this, &MainWindow::onOpenKicadPcb);
     fileMenu->addSeparator();
     fileMenu->addAction("E&xit", this, &QWidget::close);
+
+    auto* viewMenu = menuBar()->addMenu("&View");
+    auto* fitAct = viewMenu->addAction("&Fit to Board");
+    fitAct->setShortcut(QKeySequence(Qt::Key_Home));
+    connect(fitAct, &QAction::triggered, canvas_, &PcbCanvas::fitToBoard);
+    viewMenu->addAction(dock->toggleViewAction());
 
     statusBar()->showMessage("Ready");
 }
@@ -35,6 +52,19 @@ void MainWindow::onOpenKicadPcb() {
         "KiCad PCB (*.kicad_pcb);;All files (*)");
     if (path.isEmpty()) return;
     loadKicadPcb(path);
+}
+
+void MainWindow::populateLayerPanel() {
+    if (!board_) {
+        layer_panel_->setLayers({});
+        return;
+    }
+    std::vector<LayerPanel::Entry> entries;
+    for (const auto& L : board_->stackup.layers) {
+        if (!L.is_copper()) continue;
+        entries.push_back({L.ordinal, QString::fromStdString(L.name)});
+    }
+    layer_panel_->setLayers(entries);
 }
 
 bool MainWindow::loadKicadPcb(const QString& path) {
@@ -54,6 +84,7 @@ bool MainWindow::loadKicadPcb(const QString& path) {
 
         board_ = std::move(board);
         canvas_->setBoard(board_.get());
+        populateLayerPanel();
 
         spdlog::info("loaded {}: {} layers ({} copper), {} nets, {} segments, "
                      "{} vias, {} pads, {} zones",

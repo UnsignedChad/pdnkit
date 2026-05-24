@@ -1,5 +1,6 @@
 #pragma once
 
+#include <unordered_map>
 #include <vector>
 
 #include <QOpenGLBuffer>
@@ -22,6 +23,12 @@ public:
     // of the camera. GPU buffers are populated lazily on the next paintGL().
     void setBoard(const pdnkit::model::Board* board);
 
+    // Toggle a single layer's visibility. Re-paints; no rebuild of GPU data.
+    void setLayerVisibility(int ordinal, bool visible);
+
+    // Re-run fit-to-bounds on whatever board is currently loaded.
+    void fitToBoard();
+
 protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
@@ -34,9 +41,8 @@ protected:
 
 private:
     void buildGrid();
-    void uploadBoardMeshes();  // called from paintGL when meshes_dirty_
+    void uploadBoardMeshes();
 
-    // Cached draw range for one copper layer inside the consolidated VBO/IBO.
     struct LayerRange {
         int ordinal = 0;
         int index_start = 0;
@@ -48,18 +54,19 @@ private:
 
     QOpenGLShaderProgram prog_;
 
-    // Grid (always present)
     QOpenGLBuffer grid_vbo_{QOpenGLBuffer::VertexBuffer};
     QOpenGLVertexArrayObject grid_vao_;
     int grid_vertex_count_ = 0;
 
-    // Board zone geometry (per layer, drawn back-to-front)
     QOpenGLBuffer board_vbo_{QOpenGLBuffer::VertexBuffer};
     QOpenGLBuffer board_ibo_{QOpenGLBuffer::IndexBuffer};
     QOpenGLVertexArrayObject board_vao_;
     std::vector<LayerRange> layer_ranges_;
     std::vector<pdnkit::render::LayerMesh> pending_meshes_;
     bool meshes_dirty_ = false;
+
+    // Per-layer visibility. Absent = visible (default). Map only stores overrides.
+    std::unordered_map<int, bool> layer_visible_;
 
     bool panning_ = false;
     QPoint last_mouse_;

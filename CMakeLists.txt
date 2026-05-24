@@ -46,6 +46,7 @@ add_executable(pdnkit
     src/main.cpp
     src/MainWindow.cpp
     src/PcbCanvas.cpp
+    src/LayerPanel.cpp
 )
 target_link_libraries(pdnkit PRIVATE
     pdnkit_core
