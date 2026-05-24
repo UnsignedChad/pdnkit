@@ -24,6 +24,13 @@ struct Layer {
     int ordinal = 0;           // KiCad layer ID (0=F.Cu, 31=B.Cu, etc.)
     std::string name;          // 'F.Cu', 'In1.Cu', 'B.Cu'
     std::string type;          // 'signal', 'power', 'mixed', 'jumper', 'user'
+    // Per-layer stackup data extracted from (setup (stackup ...)), when
+    // present. Zero/empty means the KiCad file did not specify it -- caller
+    // should fall back to a sensible default (35um copper, FR-4 eps_r 4.3).
+    double thickness = 0.0;    // meters
+    std::string material;      // e.g. 'copper', 'FR4', 'prepreg'
+    double epsilon_r = 0.0;    // dielectric only
+    double loss_tangent = 0.0; // dielectric only
 
     bool is_copper() const noexcept {
         // KiCad copper layer types: signal / power / mixed / jumper.

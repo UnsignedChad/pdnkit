@@ -86,6 +86,7 @@ public:
         }
         parse_general();
         parse_layers();
+        parse_stackup();
         parse_nets();
         parse_segments();
         parse_vias();
@@ -149,6 +150,56 @@ private:
             L.type = std::string(expect_string_or_symbol(row.children[2]));
             layer_name_to_id_[L.name] = L.ordinal;
             board_.stackup.layers.push_back(std::move(L));
+        }
+    }
+
+    void parse_stackup() {
+        // (setup (stackup (layer "F.Cu" (type "copper") (thickness 0.035))
+        //                 (layer "dielectric 1" (type "core") (thickness 1.6)
+        //                                       (material "FR4") (epsilon_r 4.5)
+        //                                       (loss_tangent 0.02)) ...))
+        const Node* setup = find_child(root_, "setup");
+        if (!setup) return;
+        const Node* stack = find_child(*setup, "stackup");
+        if (!stack) return;
+
+        for (const Node* lay : find_children(*stack, "layer")) {
+            if (lay->children.size() < 2) continue;
+            const auto& name_node = lay->children[1];
+            if (!name_node.is_string() && !name_node.is_symbol()) continue;
+            const std::string lname = name_node.text;
+
+            // Look up the named layer in the already-parsed stackup, or skip
+            // if its a dielectric / non-copper entry we did not list above
+            // (we will still mine it for material/epsilon when implementing
+            // a fuller stackup model).
+            model::Layer* target = nullptr;
+            for (auto& L : board_.stackup.layers) {
+                if (L.name == lname) { target = &L; break; }
+            }
+            if (!target) continue;
+
+            if (const Node* t = find_child(*lay, "thickness")) {
+                if (t->children.size() >= 2 && t->children[1].is_number()) {
+                    target->thickness = t->children[1].number * kMmToM;
+                }
+            }
+            if (const Node* m = find_child(*lay, "material")) {
+                if (m->children.size() >= 2 &&
+                    (m->children[1].is_string() || m->children[1].is_symbol())) {
+                    target->material = m->children[1].text;
+                }
+            }
+            if (const Node* e = find_child(*lay, "epsilon_r")) {
+                if (e->children.size() >= 2 && e->children[1].is_number()) {
+                    target->epsilon_r = e->children[1].number;
+                }
+            }
+            if (const Node* l = find_child(*lay, "loss_tangent")) {
+                if (l->children.size() >= 2 && l->children[1].is_number()) {
+                    target->loss_tangent = l->children[1].number;
+                }
+            }
         }
     }
 

@@ -16,6 +16,7 @@ public:
     struct Entry {
         int ordinal = 0;
         QString name;
+        double thickness_um = 0.0;  // 0 = unknown
     };
 
     explicit LayerPanel(QWidget* parent = nullptr);

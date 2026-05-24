@@ -68,7 +68,16 @@ void LayerPanel::setLayers(const std::vector<Entry>& layers) {
         h->addWidget(makeSwatch(L.ordinal));
 
         auto* name = new QLabel(L.name);
+        name->setMinimumWidth(70);
         h->addWidget(name);
+
+        // Thickness label -- pulled from the LayerPanel Entry. Empty if the
+        // (setup (stackup ...)) block did not supply a value for this layer.
+        if (L.thickness_um > 0.0) {
+            auto* t = new QLabel(QString::number(L.thickness_um, 'f', 1) + " um");
+            t->setStyleSheet("color: #888;");
+            h->addWidget(t);
+        }
         h->addStretch();
 
         rows_layout_->addWidget(row);

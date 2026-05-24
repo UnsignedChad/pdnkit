@@ -248,7 +248,11 @@ void MainWindow::populateLayerPanel() {
     std::vector<LayerPanel::Entry> entries;
     for (const auto& L : board_->stackup.layers) {
         if (!L.is_copper()) continue;
-        entries.push_back({L.ordinal, QString::fromStdString(L.name)});
+        LayerPanel::Entry e;
+        e.ordinal = L.ordinal;
+        e.name = QString::fromStdString(L.name);
+        e.thickness_um = L.thickness * 1.0e6;  // m -> um
+        entries.push_back(e);
     }
     layer_panel_->setLayers(entries);
 }
