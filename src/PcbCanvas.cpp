@@ -68,7 +68,7 @@ void PcbCanvas::setBoard(const pdnkit::model::Board* board) {
     pending_meshes_.clear();
 
     if (board_) {
-        pending_meshes_ = pdnkit::render::ZoneMesher::build(*board_);
+        pending_meshes_ = pdnkit::render::build_all_meshes(*board_);
         meshes_dirty_ = true;
 
         // Fit camera to board bounding box (zones, segments, pads).

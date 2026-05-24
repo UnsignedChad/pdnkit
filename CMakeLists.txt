@@ -30,6 +30,7 @@ add_library(pdnkit_core STATIC
     src/parser/KicadPcbParser.cpp
     src/render/Camera2D.cpp
     src/render/ZoneMesher.cpp
+    src/render/SegmentMesher.cpp
 )
 target_include_directories(pdnkit_core PUBLIC src)
 target_include_directories(pdnkit_core PUBLIC third_party)

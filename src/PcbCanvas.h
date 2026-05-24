@@ -11,7 +11,7 @@
 
 #include "model/Board.h"
 #include "render/Camera2D.h"
-#include "render/ZoneMesher.h"
+#include "render/SegmentMesher.h"
 
 class PcbCanvas : public QOpenGLWidget, protected QOpenGLFunctions_3_3_Core {
     Q_OBJECT
