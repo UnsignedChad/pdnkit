@@ -9,6 +9,7 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QListWidget>
 #include <QLabel>
 #include <QPushButton>
 #include <QTableWidget>
@@ -66,6 +67,12 @@ AnalysisPanel::AnalysisPanel(QWidget* parent) : QWidget(parent) {
     form->addRow("Default I:", default_current_spin_);
     form->addRow("Cell:",    cell_size_spin_);
     outer->addLayout(form);
+
+    auto* extra_label = new QLabel("Include extra layers (vias wire them):");
+    outer->addWidget(extra_label);
+    extra_layers_ = new QListWidget();
+    extra_layers_->setMaximumHeight(80);
+    outer->addWidget(extra_layers_);
 
     auto* pads_label = new QLabel("Pad currents:");
     outer->addWidget(pads_label);
@@ -133,11 +140,39 @@ void AnalysisPanel::setBoard(const pdnkit::model::Board* board) {
         net_combo_->addItem(QString("%1 (#%2)").arg(name).arg(id), id);
     }
 
+    rebuildExtraLayers();
     rebuildPadTable();
 }
 
 void AnalysisPanel::onNetOrLayerChanged() {
+    rebuildExtraLayers();
     rebuildPadTable();
+}
+
+void AnalysisPanel::rebuildExtraLayers() {
+    // Remember which ordinals were checked so the user keeps their selection
+    // when the primary layer changes.
+    std::set<int> previously_checked;
+    for (int i = 0; i < extra_layers_->count(); ++i) {
+        auto* item = extra_layers_->item(i);
+        if (item->checkState() == Qt::Checked) {
+            previously_checked.insert(item->data(Qt::UserRole).toInt());
+        }
+    }
+
+    extra_layers_->clear();
+    if (!board_ || layer_combo_->count() == 0) return;
+    const int primary = layer_combo_->currentData().toInt();
+    for (const auto& L : board_->stackup.layers) {
+        if (!L.is_copper()) continue;
+        if (L.ordinal == primary) continue;
+        auto* item = new QListWidgetItem(QString::fromStdString(L.name),
+                                         extra_layers_);
+        item->setData(Qt::UserRole, L.ordinal);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(previously_checked.count(L.ordinal)
+                                ? Qt::Checked : Qt::Unchecked);
+    }
 }
 
 void AnalysisPanel::rebuildPadTable() {
@@ -209,6 +244,13 @@ pdnkit::pi::MeshConfig AnalysisPanel::currentConfig() const {
         ? net_combo_->currentData().toInt() : -1;
     cfg.layer_ordinal = (layer_combo_->count() > 0)
         ? layer_combo_->currentData().toInt() : 0;
+
+    for (int i = 0; i < extra_layers_->count(); ++i) {
+        auto* item = extra_layers_->item(i);
+        if (item->checkState() == Qt::Checked) {
+            cfg.extra_layer_ordinals.push_back(item->data(Qt::UserRole).toInt());
+        }
+    }
 
     for (int r = 0; r < pad_table_->rowCount(); ++r) {
         auto* s = row_spin(pad_table_, r);

@@ -35,11 +35,13 @@ private slots:
 
 private:
     void rebuildPadTable();
+    void rebuildExtraLayers();
 
     const pdnkit::model::Board* board_ = nullptr;
 
     QComboBox* net_combo_;
     QComboBox* layer_combo_;
+    class QListWidget* extra_layers_;
     QDoubleSpinBox* default_current_spin_;
     QDoubleSpinBox* cell_size_spin_;
     QTableWidget* pad_table_;
