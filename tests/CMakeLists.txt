@@ -17,6 +17,7 @@ add_executable(pdnkit_tests
     cavity_model_test.cpp
     decap_optimizer_test.cpp
     e2e_test.cpp
+    ohms_law_test.cpp
 )
 
 target_compile_definitions(pdnkit_tests PRIVATE
