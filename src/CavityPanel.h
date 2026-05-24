@@ -26,10 +26,12 @@ public:
 
 signals:
     // Fires whenever the decap list changes (add / remove / cell edit).
-    // Positions are world coords in meters relative to the plane corner
-    // — for now treat them as canvas world coords too (the cavity panel
-    // does not yet know the plane bbox offset in board coords).
     void decapsChanged(const std::vector<pdnkit::model::Point2>& positions);
+
+    // Fires whenever the cavity bbox or port positions change (net swap,
+    // layer swap, or port spinbox edit).
+    void cavityChanged(double lo_x, double lo_y, double hi_x, double hi_y,
+                       const std::vector<pdnkit::model::Point2>& ports);
 
 private slots:
     void onRun();
@@ -40,6 +42,7 @@ private slots:
     void onAutoSuggest();
 
 private:
+    void emitCavity();
     void rebuildNetCombo();
 
     const pdnkit::model::Board* board_ = nullptr;

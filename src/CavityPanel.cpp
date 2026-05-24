@@ -193,6 +193,16 @@ CavityPanel::CavityPanel(QWidget* parent) : QWidget(parent) {
     plot_ = new ZfPlotWidget(this);
     outer->addWidget(plot_, 1);
 
+    connect(net_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int){ emitCavity(); });
+    connect(port1_x_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [this](double){ emitCavity(); });
+    connect(port1_y_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [this](double){ emitCavity(); });
+    connect(port2_x_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [this](double){ emitCavity(); });
+    connect(port2_y_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [this](double){ emitCavity(); });
     connect(run_btn_,   &QPushButton::clicked, this, &CavityPanel::onRun);
     connect(save_btn_,  &QPushButton::clicked, this, &CavityPanel::onSaveCsv);
     connect(clear_btn_, &QPushButton::clicked, this, &CavityPanel::onClear);
@@ -226,10 +236,44 @@ void CavityPanel::onRemoveDecap() {
     emit decapsChanged(read_decap_positions(decap_table_, 0.0, 0.0));
 }
 
+namespace {
+
+std::vector<pdnkit::model::Point2> port_positions(double p1x_mm, double p1y_mm,
+                                                   double p2x_mm, double p2y_mm,
+                                                   double offset_x_m, double offset_y_m) {
+    return {
+        {p1x_mm * 1.0e-3 + offset_x_m, p1y_mm * 1.0e-3 + offset_y_m},
+        {p2x_mm * 1.0e-3 + offset_x_m, p2y_mm * 1.0e-3 + offset_y_m},
+    };
+}
+
+}  // namespace
+
+void CavityPanel::emitCavity() {
+    if (!board_ || net_combo_->count() == 0) {
+        emit cavityChanged(0, 0, 0, 0, {});
+        return;
+    }
+    const int net = net_combo_->currentData().toInt();
+    constexpr int kPrimaryLayer = 0;
+    const Bbox bb = zone_bbox(*board_, net, kPrimaryLayer);
+    if (!bb.ok) {
+        emit cavityChanged(0, 0, 0, 0, {});
+        return;
+    }
+    // Port positions are panel inputs in plane-local mm; translate to world
+    // coords by adding the bbox lo corner.
+    auto ports = port_positions(port1_x_->value(), port1_y_->value(),
+                                port2_x_->value(), port2_y_->value(),
+                                bb.lo_x, bb.lo_y);
+    emit cavityChanged(bb.lo_x, bb.lo_y, bb.hi_x, bb.hi_y, ports);
+}
+
 void CavityPanel::setBoard(const pdnkit::model::Board* board) {
     board_ = board;
     rebuildNetCombo();
     plot_->clear();
+    emitCavity();
 }
 
 void CavityPanel::rebuildNetCombo() {

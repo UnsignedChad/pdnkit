@@ -39,6 +39,12 @@ public:
     // the user adds/removes/edits a decap.
     void setDecapMarkers(const std::vector<pdnkit::model::Point2>& positions);
 
+    // Cavity highlight: dashed bbox around the meshed plane, plus port
+    // markers (cyan dots). Pass an empty Point2 list to clear ports;
+    // pass hi <= lo on bbox to clear the rectangle.
+    void setCavityHighlight(double lo_x, double lo_y, double hi_x, double hi_y,
+                            const std::vector<pdnkit::model::Point2>& ports);
+
 signals:
     void hoverInfo(const QString& info);
 
@@ -110,6 +116,19 @@ private:
     int decap_index_count_ = 0;
     std::vector<pdnkit::model::Point2> pending_decaps_;
     bool decaps_dirty_ = false;
+
+    // Cavity overlay: bbox outline (dashed) + port markers (cyan).
+    double cavity_lo_x_ = 0.0, cavity_lo_y_ = 0.0;
+    double cavity_hi_x_ = 0.0, cavity_hi_y_ = 0.0;
+    std::vector<pdnkit::model::Point2> cavity_ports_;
+    QOpenGLBuffer cavity_rect_vbo_{QOpenGLBuffer::VertexBuffer};
+    QOpenGLVertexArrayObject cavity_rect_vao_;
+    QOpenGLBuffer cavity_port_vbo_{QOpenGLBuffer::VertexBuffer};
+    QOpenGLBuffer cavity_port_ibo_{QOpenGLBuffer::IndexBuffer};
+    QOpenGLVertexArrayObject cavity_port_vao_;
+    int cavity_rect_vertex_count_ = 0;
+    int cavity_port_index_count_ = 0;
+    bool cavity_dirty_ = false;
 
     std::unordered_map<int, bool> layer_visible_;
 

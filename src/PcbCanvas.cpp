@@ -148,6 +148,18 @@ void PcbCanvas::setDecapMarkers(const std::vector<pdnkit::model::Point2>& positi
     update();
 }
 
+void PcbCanvas::setCavityHighlight(double lo_x, double lo_y,
+                                    double hi_x, double hi_y,
+                                    const std::vector<pdnkit::model::Point2>& ports) {
+    cavity_lo_x_ = lo_x;
+    cavity_lo_y_ = lo_y;
+    cavity_hi_x_ = hi_x;
+    cavity_hi_y_ = hi_y;
+    cavity_ports_ = ports;
+    cavity_dirty_ = true;
+    update();
+}
+
 
 void PcbCanvas::initializeGL() {
     initializeOpenGLFunctions();
@@ -222,6 +234,27 @@ void PcbCanvas::initializeGL() {
     decap_vao_.release();
     decap_vbo_.release();
     decap_ibo_.release();
+
+    cavity_rect_vao_.create();
+    cavity_rect_vbo_.create();
+    cavity_rect_vao_.bind();
+    cavity_rect_vbo_.bind();
+    flat_prog_.enableAttributeArray(0);
+    flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+    cavity_rect_vao_.release();
+    cavity_rect_vbo_.release();
+
+    cavity_port_vao_.create();
+    cavity_port_vbo_.create();
+    cavity_port_ibo_.create();
+    cavity_port_vao_.bind();
+    cavity_port_vbo_.bind();
+    cavity_port_ibo_.bind();
+    flat_prog_.enableAttributeArray(0);
+    flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+    cavity_port_vao_.release();
+    cavity_port_vbo_.release();
+    cavity_port_ibo_.release();
 }
 
 void PcbCanvas::buildGrid() {
@@ -500,6 +533,84 @@ void PcbCanvas::paintGL() {
         decap_vao_.bind();
         glDrawElements(GL_TRIANGLES, decap_index_count_, GL_UNSIGNED_INT, nullptr);
         decap_vao_.release();
+        flat_prog_.release();
+    }
+
+    // Cavity overlay: lazily upload, then draw rect + port markers.
+    if (cavity_dirty_) {
+        // Rect as a 5-vertex line strip (uses GL_LINE_STRIP) drawing the
+        // four edges; if the rect is degenerate (hi <= lo) we skip.
+        std::vector<float> rverts;
+        if (cavity_hi_x_ > cavity_lo_x_ && cavity_hi_y_ > cavity_lo_y_) {
+            rverts = {
+                static_cast<float>(cavity_lo_x_), static_cast<float>(cavity_lo_y_),
+                static_cast<float>(cavity_hi_x_), static_cast<float>(cavity_lo_y_),
+                static_cast<float>(cavity_hi_x_), static_cast<float>(cavity_hi_y_),
+                static_cast<float>(cavity_lo_x_), static_cast<float>(cavity_hi_y_),
+                static_cast<float>(cavity_lo_x_), static_cast<float>(cavity_lo_y_),
+            };
+        }
+        cavity_rect_vertex_count_ = static_cast<int>(rverts.size() / 2);
+
+        cavity_rect_vao_.bind();
+        cavity_rect_vbo_.bind();
+        if (!rverts.empty()) {
+            cavity_rect_vbo_.allocate(rverts.data(),
+                static_cast<int>(rverts.size() * sizeof(float)));
+            flat_prog_.enableAttributeArray(0);
+            flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+        }
+        cavity_rect_vao_.release();
+        cavity_rect_vbo_.release();
+
+        // Port markers (small filled disks).
+        pdnkit::render::LayerMesh pm;
+        const double r = 0.8e-3;
+        for (const auto& p : cavity_ports_) {
+            pdnkit::render::append_disk(pm, p.x, p.y, r, 24);
+        }
+        cavity_port_index_count_ = static_cast<int>(pm.indices.size());
+
+        cavity_port_vao_.bind();
+        cavity_port_vbo_.bind();
+        if (!pm.vertices.empty()) {
+            cavity_port_vbo_.allocate(pm.vertices.data(),
+                static_cast<int>(pm.vertices.size() * sizeof(float)));
+        }
+        cavity_port_ibo_.bind();
+        if (!pm.indices.empty()) {
+            cavity_port_ibo_.allocate(pm.indices.data(),
+                static_cast<int>(pm.indices.size() * sizeof(std::uint32_t)));
+        }
+        if (!pm.vertices.empty()) {
+            flat_prog_.enableAttributeArray(0);
+            flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+        }
+        cavity_port_vao_.release();
+        cavity_port_vbo_.release();
+        cavity_port_ibo_.release();
+
+        cavity_dirty_ = false;
+    }
+
+    if (cavity_rect_vertex_count_ > 0) {
+        flat_prog_.bind();
+        flat_prog_.setUniformValue("u_proj", proj);
+        flat_prog_.setUniformValue("u_color", QVector4D(0.30f, 0.85f, 0.95f, 0.85f));
+        glLineWidth(2.0f);
+        cavity_rect_vao_.bind();
+        glDrawArrays(GL_LINE_STRIP, 0, cavity_rect_vertex_count_);
+        cavity_rect_vao_.release();
+        glLineWidth(1.0f);
+        flat_prog_.release();
+    }
+    if (cavity_port_index_count_ > 0) {
+        flat_prog_.bind();
+        flat_prog_.setUniformValue("u_proj", proj);
+        flat_prog_.setUniformValue("u_color", QVector4D(0.10f, 0.95f, 0.95f, 1.0f));
+        cavity_port_vao_.bind();
+        glDrawElements(GL_TRIANGLES, cavity_port_index_count_, GL_UNSIGNED_INT, nullptr);
+        cavity_port_vao_.release();
         flat_prog_.release();
     }
 }

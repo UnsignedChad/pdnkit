@@ -79,6 +79,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     tabifyDockWidget(an_dock, cav_dock);
     connect(cavity_panel_, &CavityPanel::decapsChanged,
             canvas_, &PcbCanvas::setDecapMarkers);
+    connect(cavity_panel_, &CavityPanel::cavityChanged,
+            canvas_, &PcbCanvas::setCavityHighlight);
 
     auto* fileMenu = menuBar()->addMenu("&File");
     auto* openAct = fileMenu->addAction("&Open KiCad PCB...");
