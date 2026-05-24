@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <unordered_map>
 
 #include "render/IrResultMesh.h"
@@ -83,6 +84,50 @@ IrResultMesh build_ir_result_mesh(const pi::IrMesh& mesh,
         }
     }
 
+    return out;
+}
+
+
+IrResultMesh build_grid_mesh(const std::vector<double>& mags,
+                              int nx, int ny,
+                              double dx, double dy,
+                              double origin_x, double origin_y) {
+    IrResultMesh out;
+    if (mags.empty() || nx < 1 || ny < 1 ||
+        mags.size() != static_cast<std::size_t>(nx) * ny) {
+        return out;
+    }
+    out.v_min = *std::min_element(mags.begin(), mags.end());
+    out.v_max = *std::max_element(mags.begin(), mags.end());
+    const double span = out.v_max - out.v_min;
+    const double inv_span = (span > 0.0) ? 1.0 / span : 0.0;
+
+    const float hx = static_cast<float>(0.5 * dx);
+    const float hy = static_cast<float>(0.5 * dy);
+
+    out.vertices.reserve(static_cast<std::size_t>(nx) * ny * 12);
+    out.indices.reserve(static_cast<std::size_t>(nx) * ny * 6);
+
+    for (int j = 0; j < ny; ++j) {
+        for (int i = 0; i < nx; ++i) {
+            const float cx = static_cast<float>(origin_x + (i + 0.5) * dx);
+            const float cy = static_cast<float>(origin_y + (j + 0.5) * dy);
+            const double m = mags[j * nx + i];
+            const float t = static_cast<float>((m - out.v_min) * inv_span);
+            const auto base = static_cast<std::uint32_t>(out.vertex_count());
+            out.vertices.insert(out.vertices.end(),
+                                {cx - hx, cy - hy, t,
+                                 cx + hx, cy - hy, t,
+                                 cx + hx, cy + hy, t,
+                                 cx - hx, cy + hy, t});
+            out.indices.insert(out.indices.end(),
+                               {base + 0, base + 1, base + 2,
+                                base + 0, base + 2, base + 3});
+        }
+    }
+    // Single layer-range covering the whole grid; ordinal doesn't matter for
+    // the heat-map shader, just put it on layer 0.
+    out.layer_ranges.push_back({0, 0, static_cast<int>(out.indices.size())});
     return out;
 }
 

@@ -120,4 +120,27 @@ std::vector<double> cavity_impedance_with_decaps_magnitude_sweep(
     return out;
 }
 
+
+std::vector<double> cavity_mode_shape_grid(
+    const CavityConfig& cfg,
+    double obs_x, double obs_y,
+    double omega,
+    int nx, int ny) {
+    std::vector<double> out;
+    if (nx < 1 || ny < 1) return out;
+    out.reserve(static_cast<std::size_t>(nx) * ny);
+
+    const double dx = cfg.a / nx;
+    const double dy = cfg.b / ny;
+    for (int j = 0; j < ny; ++j) {
+        const double y = (j + 0.5) * dy;
+        for (int i = 0; i < nx; ++i) {
+            const double x = (i + 0.5) * dx;
+            out.push_back(std::abs(
+                cavity_impedance(cfg, obs_x, obs_y, x, y, omega)));
+        }
+    }
+    return out;
+}
+
 }  // namespace pdnkit::pi

@@ -68,6 +68,16 @@ std::complex<double> cavity_impedance_with_decaps(
     const std::vector<Decap>& decaps,
     double omega);
 
+// Evaluate the cavity-model transfer impedance |Z(obs, grid_point, omega)|
+// on a regular nx*ny grid spanning the plane. Returned in row-major order
+// (out[j*nx + i] is the cell at column i, row j). Used by the renderer to
+// paint the standing-wave pattern of a plane resonance.
+std::vector<double> cavity_mode_shape_grid(
+    const CavityConfig& cfg,
+    double obs_x, double obs_y,
+    double omega,
+    int nx, int ny);
+
 // |Z| sweep with decaps.
 std::vector<double> cavity_impedance_with_decaps_magnitude_sweep(
     const CavityConfig& cfg,

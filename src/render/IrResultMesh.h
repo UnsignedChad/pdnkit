@@ -50,4 +50,12 @@ IrResultMesh build_ir_result_mesh(const pi::IrMesh& mesh,
                                    const pi::Solution& solution,
                                    double cell_size);
 
+// Build a colored grid mesh from a flat magnitudes array (row-major,
+// nx*ny). origin_x/y is the world position of the lower-left corner; the
+// grid covers (origin_x, origin_y) to (origin_x + nx*dx, origin_y + ny*dy).
+IrResultMesh build_grid_mesh(const std::vector<double>& mags,
+                              int nx, int ny,
+                              double dx, double dy,
+                              double origin_x, double origin_y);
+
 }  // namespace pdnkit::render

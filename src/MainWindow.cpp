@@ -81,6 +81,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             canvas_, &PcbCanvas::setDecapMarkers);
     connect(cavity_panel_, &CavityPanel::cavityChanged,
             canvas_, &PcbCanvas::setCavityHighlight);
+    connect(cavity_panel_, &CavityPanel::modeShapeMesh, this,
+            [this](pdnkit::render::IrResultMesh m) {
+                legend_->setRange(m.v_min, m.v_max);
+                canvas_->setIrResult(std::move(m));
+            });
 
     auto* fileMenu = menuBar()->addMenu("&File");
     auto* openAct = fileMenu->addAction("&Open KiCad PCB...");

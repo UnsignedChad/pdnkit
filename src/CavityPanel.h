@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "model/Board.h"
+#include "render/IrResultMesh.h"
 
 class QComboBox;
 class QDoubleSpinBox;
@@ -40,6 +41,10 @@ private slots:
     void onAddDecap();
     void onRemoveDecap();
     void onAutoSuggest();
+    void onShowModeShape();
+
+signals:
+    void modeShapeMesh(pdnkit::render::IrResultMesh mesh);
 
 private:
     void emitCavity();

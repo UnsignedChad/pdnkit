@@ -186,6 +186,13 @@ CavityPanel::CavityPanel(QWidget* parent) : QWidget(parent) {
     dec_btn_row->addWidget(auto_decap_btn_);
     outer->addLayout(dec_btn_row);
 
+    auto* mode_btn = new QPushButton("Show mode shape at peak");
+    mode_btn->setToolTip(
+        "After running a sweep, click to overlay the standing-wave voltage "
+        "pattern at the largest |Z(f)| peak on the canvas.");
+    outer->addWidget(mode_btn);
+    connect(mode_btn, &QPushButton::clicked, this, &CavityPanel::onShowModeShape);
+
     auto* btn_row = new QHBoxLayout();
     run_btn_   = new QPushButton("Run sweep");
     save_btn_  = new QPushButton("Save CSV...");
@@ -539,4 +546,60 @@ void CavityPanel::onAutoSuggest() {
         .arg(opt.target_z * 1000.0, 0, 'f', 3)
         .arg(result.target_met ? "met" : "NOT met (cap budget exhausted)");
     QMessageBox::information(this, "Auto-suggest decaps", msg);
+}
+
+void CavityPanel::onShowModeShape() {
+    if (last_freqs_.empty() || last_mags_.empty() ||
+        last_freqs_.size() != last_mags_.size()) {
+        QMessageBox::information(this, "Mode shape",
+            "Run a Z(f) sweep first.");
+        return;
+    }
+    // Find peak frequency.
+    std::size_t peak_i = 0;
+    double peak_v = last_mags_[0];
+    for (std::size_t i = 1; i < last_mags_.size(); ++i) {
+        if (last_mags_[i] > peak_v) { peak_v = last_mags_[i]; peak_i = i; }
+    }
+    const double f_peak = last_freqs_[peak_i];
+    const double omega = 2.0 * 3.141592653589793 * f_peak;
+
+    if (!board_ || net_combo_->count() == 0) return;
+    const int net = net_combo_->currentData().toInt();
+    constexpr int kPrimaryLayer = 0;
+    const Bbox bb = zone_bbox(*board_, net, kPrimaryLayer);
+    if (!bb.ok) return;
+
+    pdnkit::pi::CavityConfig cfg;
+    cfg.a = bb.hi_x - bb.lo_x;
+    cfg.b = bb.hi_y - bb.lo_y;
+    cfg.d = thickness_spin_->value() * 1.0e-3;
+    cfg.eps_r = eps_r_spin_->value();
+    cfg.tan_delta = tan_delta_spin_->value();
+    cfg.max_modes = modes_spin_->value();
+
+    const double obs_x = port1_x_->value() * 1.0e-3;
+    const double obs_y = port1_y_->value() * 1.0e-3;
+
+    // Grid resolution: ~80 cells across the longer dimension.
+    constexpr int kGridLong = 80;
+    const int nx = std::max(8, static_cast<int>(kGridLong * cfg.a / std::max(cfg.a, cfg.b)));
+    const int ny = std::max(8, static_cast<int>(kGridLong * cfg.b / std::max(cfg.a, cfg.b)));
+
+    auto mags = pdnkit::pi::cavity_mode_shape_grid(cfg, obs_x, obs_y, omega, nx, ny);
+    auto mesh = pdnkit::render::build_grid_mesh(
+        mags, nx, ny, cfg.a / nx, cfg.b / ny, bb.lo_x, bb.lo_y);
+
+    const QString units = (peak_v >= 1.0) ? "ohm"
+                                          : (peak_v >= 1.0e-3) ? "mohm" : "uohm";
+    const double scaled = (peak_v >= 1.0) ? peak_v
+                                          : (peak_v >= 1.0e-3) ? peak_v * 1000.0
+                                                                 : peak_v * 1.0e6;
+    QString msg = QString("Mode shape at peak %1 MHz (|Z| %2 %3)")
+                      .arg(f_peak / 1.0e6, 0, 'f', 1)
+                      .arg(scaled, 0, 'f', 3)
+                      .arg(units);
+    QMessageBox::information(this, "Mode shape", msg);
+
+    emit modeShapeMesh(std::move(mesh));
 }
