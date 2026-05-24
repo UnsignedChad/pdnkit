@@ -225,10 +225,19 @@ Node parse(std::string_view src) {
         throw ParseError("empty input", 1, 1);
     }
     Node root = parse_node(lex, std::move(first));
-    auto trailing = lex.next();
-    if (trailing.kind != Lexer::Tok::End) {
-        throw ParseError("unexpected trailing tokens after top-level expression",
-                         trailing.line, trailing.col);
+    // KiCad files sometimes have sibling top-level forms after the main
+    // (kicad_pcb ...) block (embedded_fonts, 3D model entries, etc.) --
+    // silently discard those, but a stray standalone token (especially
+    // a lone close paren) is still a real error.
+    auto next = lex.next();
+    while (next.kind != Lexer::Tok::End) {
+        if (next.kind == Lexer::Tok::RParen) {
+            throw ParseError("unexpected ')' at top level",
+                             next.line, next.col);
+        }
+        // Parse and discard another full form (LParen-rooted or atom).
+        (void)parse_node(lex, std::move(next));
+        next = lex.next();
     }
     return root;
 }

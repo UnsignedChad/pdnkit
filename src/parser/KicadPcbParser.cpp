@@ -206,37 +206,90 @@ private:
         return out;
     }
 
+    // Expand a KiCad layer-name token into the set of actual copper layer
+    // ordinals it covers. Handles plain names ("F.Cu") and the multi-layer
+    // shorthand ("F&B.Cu" -> [F.Cu, B.Cu]; "*.Cu" -> every copper layer).
+    std::vector<int> resolve_layer_names(const std::string& token) {
+        std::vector<int> out;
+        if (token == "*.Cu") {
+            for (const auto& L : board_.stackup.layers) {
+                if (L.is_copper()) out.push_back(L.ordinal);
+            }
+            return out;
+        }
+        if (token.find('&') != std::string::npos) {
+            // "F&B.Cu" -> ["F.Cu", "B.Cu"]. Split on '&', append the common
+            // suffix (everything after the first '.') to each prefix.
+            const auto dot = token.find('.');
+            if (dot == std::string::npos) return out;
+            const std::string suffix = token.substr(dot);  // ".Cu"
+            const std::string prefixes = token.substr(0, dot);  // "F&B"
+            std::size_t start = 0;
+            while (start <= prefixes.size()) {
+                const std::size_t amp = prefixes.find('&', start);
+                const std::string prefix = (amp == std::string::npos)
+                    ? prefixes.substr(start)
+                    : prefixes.substr(start, amp - start);
+                const std::string full = prefix + suffix;
+                auto it = layer_name_to_id_.find(full);
+                if (it != layer_name_to_id_.end()) out.push_back(it->second);
+                if (amp == std::string::npos) break;
+                start = amp + 1;
+            }
+            return out;
+        }
+        auto it = layer_name_to_id_.find(token);
+        if (it != layer_name_to_id_.end()) out.push_back(it->second);
+        return out;
+    }
+
     void parse_zones() {
         for (const Node* zn : find_children(root_, "zone")) {
-            model::Zone z;
-            if (const Node* netr  = find_child(*zn, "net"))      z.net_id = net_id_(*netr);
-            if (const Node* nm    = find_child(*zn, "net_name")) z.net_name = std::string(expect_string_or_symbol(nm->children.at(1)));
-            // Modern KiCad uses (layer "F.Cu") for single-layer zones, (layers ...) for multi.
-            if (const Node* lay   = find_child(*zn, "layer")) {
-                auto names = read_layer_names(*lay);
-                if (!names.empty()) z.layer_ordinal = layer_id_(names[0], *lay);
-            } else if (const Node* lays = find_child(*zn, "layers")) {
-                auto names = read_layer_names(*lays);
-                if (!names.empty()) z.layer_ordinal = layer_id_(names[0], *lays);
-            }
+            // First gather everything that does not depend on the layer.
+            int net_id = 0;
+            std::string net_name;
+            model::Polygon outline_poly;
+            std::vector<model::Polygon> filled_polys;
 
-            // User-drawn outline: (polygon (pts ...))
+            if (const Node* netr  = find_child(*zn, "net"))      net_id = net_id_(*netr);
+            if (const Node* nm    = find_child(*zn, "net_name")) net_name = std::string(expect_string_or_symbol(nm->children.at(1)));
+
             if (const Node* poly = find_child(*zn, "polygon")) {
-                if (const Node* pts = find_child(*poly, "pts")) {
-                    z.outline.outline = read_pts(*pts);
-                }
+                if (const Node* pts = find_child(*poly, "pts")) outline_poly.outline = read_pts(*pts);
             }
-
-            // Post-pour filled regions: zero or more (filled_polygon (layer "F.Cu") (pts ...))
             for (const Node* fp : find_children(*zn, "filled_polygon")) {
                 model::Polygon p;
-                if (const Node* pts = find_child(*fp, "pts")) {
-                    p.outline = read_pts(*pts);
-                }
-                z.filled.push_back(std::move(p));
+                if (const Node* pts = find_child(*fp, "pts")) p.outline = read_pts(*pts);
+                filled_polys.push_back(std::move(p));
             }
 
-            board_.zones.push_back(std::move(z));
+            // Resolve the layer set. Modern KiCad uses (layer "X") for one,
+            // (layers ...) for many. Unknown layers silently skip the zone.
+            std::vector<int> layers;
+            if (const Node* lay = find_child(*zn, "layer")) {
+                auto names = read_layer_names(*lay);
+                for (const auto& nm : names) {
+                    auto resolved = resolve_layer_names(nm);
+                    layers.insert(layers.end(), resolved.begin(), resolved.end());
+                }
+            } else if (const Node* lays = find_child(*zn, "layers")) {
+                auto names = read_layer_names(*lays);
+                for (const auto& nm : names) {
+                    auto resolved = resolve_layer_names(nm);
+                    layers.insert(layers.end(), resolved.begin(), resolved.end());
+                }
+            }
+
+            // Emit one Zone per resolved layer.
+            for (int ord : layers) {
+                model::Zone z;
+                z.net_id = net_id;
+                z.net_name = net_name;
+                z.layer_ordinal = ord;
+                z.outline = outline_poly;
+                z.filled = filled_polys;
+                board_.zones.push_back(std::move(z));
+            }
         }
     }
 
