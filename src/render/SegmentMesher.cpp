@@ -4,6 +4,8 @@
 #include <cmath>
 #include <unordered_map>
 
+#include "render/ViaMesher.h"
+
 namespace pdnkit::render {
 
 std::vector<LayerMesh> SegmentMesher::build(const model::Board& board) {
@@ -85,6 +87,8 @@ void merge_into(std::vector<LayerMesh>& dst,
 std::vector<LayerMesh> build_all_meshes(const model::Board& board) {
     std::vector<LayerMesh> result = ZoneMesher::build(board);
     merge_into(result, SegmentMesher::build(board));
+    merge_into(result, ViaMesher::build(board));
+    merge_into(result, PadMesher::build(board));
     return result;
 }
 

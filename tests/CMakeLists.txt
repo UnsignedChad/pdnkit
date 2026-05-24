@@ -9,6 +9,7 @@ add_executable(pdnkit_tests
     camera_test.cpp
     zone_mesher_test.cpp
     segment_mesher_test.cpp
+    via_mesher_test.cpp
 )
 
 target_link_libraries(pdnkit_tests PRIVATE

@@ -31,6 +31,7 @@ add_library(pdnkit_core STATIC
     src/render/Camera2D.cpp
     src/render/ZoneMesher.cpp
     src/render/SegmentMesher.cpp
+    src/render/ViaMesher.cpp
 )
 target_include_directories(pdnkit_core PUBLIC src)
 target_include_directories(pdnkit_core PUBLIC third_party)
