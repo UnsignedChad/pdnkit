@@ -25,15 +25,21 @@ Reference: Swaminathan, *Power Integrity Modeling and Design for Semiconductors 
 
 ## Build (Debian/Ubuntu)
 
-```
-sudo apt install -y qt6-base-dev qt6-base-dev-tools libqt6opengl6-dev libqt6openglwidgets6                     libeigen3-dev libsuitesparse-dev libcgal-dev                     libspdlog-dev libcli11-dev libboost-dev                     ninja-build cmake g++
-```
+Install deps:
 
 ```
-cmake -B build -G Ninja
+sudo apt install -y qt6-base-dev qt6-base-dev-tools libqt6opengl6-dev libqt6openglwidgets6                     libeigen3-dev libsuitesparse-dev libcgal-dev                     libspdlog-dev libcli11-dev libboost-dev                     ninja-build cmake clang
+```
+
+Configure with clang (recommended — better diagnostics, faster compiles, aligns with our clang-format/clang-tidy tooling):
+
+```
+CC=clang CXX=clang++ cmake -B build -G Ninja
 cmake --build build
 ./build/pdnkit
 ```
+
+g++ also works; both are CI-tested. Omit `CC=`/`CXX=` to use the system default.
 
 ## License
 
