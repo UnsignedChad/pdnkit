@@ -4,14 +4,17 @@
 
 #include <QDockWidget>
 #include <QCloseEvent>
+#include <QFile>
 #include <QFileDialog>
 #include <QSettings>
 #include <QHBoxLayout>
 #include <QFileInfo>
 #include <QLabel>
 #include <QMenuBar>
+#include <QImage>
 #include <QMessageBox>
 #include <QStatusBar>
+#include <QTextStream>
 #include <spdlog/spdlog.h>
 
 #include "AnalysisPanel.h"
@@ -62,6 +65,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* openAct = fileMenu->addAction("&Open KiCad PCB...");
     openAct->setShortcut(QKeySequence::Open);
     connect(openAct, &QAction::triggered, this, &MainWindow::onOpenKicadPcb);
+    fileMenu->addSeparator();
+    auto* saveImgAct = fileMenu->addAction("&Save Canvas as Image...");
+    saveImgAct->setShortcut(QKeySequence("Ctrl+Shift+S"));
+    connect(saveImgAct, &QAction::triggered, this, &MainWindow::onSaveCanvasImage);
+    auto* exportCsvAct = fileMenu->addAction("&Export Results as CSV...");
+    connect(exportCsvAct, &QAction::triggered, this, &MainWindow::onExportResultsCsv);
     fileMenu->addSeparator();
     fileMenu->addAction("E&xit", this, &QWidget::close);
 
@@ -164,6 +173,8 @@ void MainWindow::onAnalyzeStaticIrDrop() {
                                                              mc.cell_size);
     canvas_->setIrResult(std::move(result_mesh));
     legend_->setRange(sol.min_v, sol.max_v);
+    last_mesh_ = std::move(mesh);
+    last_solution_ = std::move(sol);
 
     const auto* net = board_->find_net(mc.net_id);
     const QString net_name = (net && !net->name.empty())
@@ -247,4 +258,55 @@ bool MainWindow::loadKicadPcb(const QString& path) {
         spdlog::error("failed to load {}: {}", path.toStdString(), e.what());
         return false;
     }
+}
+
+void MainWindow::onSaveCanvasImage() {
+    if (!canvas_) return;
+    QString path = QFileDialog::getSaveFileName(
+        this, "Save canvas as image", QString(),
+        "PNG (*.png);;JPEG (*.jpg);;BMP (*.bmp)");
+    if (path.isEmpty()) return;
+    QImage img = canvas_->grabFramebuffer();
+    if (img.save(path)) {
+        statusBar()->showMessage(
+            QString("Saved %1  (%2 x %3)")
+                .arg(QFileInfo(path).fileName())
+                .arg(img.width())
+                .arg(img.height()));
+    } else {
+        QMessageBox::warning(this, "Save failed",
+                             QString("Could not write %1").arg(path));
+    }
+}
+
+void MainWindow::onExportResultsCsv() {
+    if (!last_solution_.ok || last_mesh_.nodes.empty() ||
+        last_solution_.voltages.size() != last_mesh_.nodes.size()) {
+        QMessageBox::information(this, "Export results",
+            "No analysis result to export. Run Analyze first.");
+        return;
+    }
+    QString path = QFileDialog::getSaveFileName(
+        this, "Export results as CSV", QString(), "CSV (*.csv)");
+    if (path.isEmpty()) return;
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "Export failed",
+                             QString("Could not open %1 for writing").arg(path));
+        return;
+    }
+    QTextStream out(&f);
+    out << "node_id,x_mm,y_mm,voltage_mV\n";
+    for (std::size_t i = 0; i < last_mesh_.nodes.size(); ++i) {
+        const auto& n = last_mesh_.nodes[i];
+        out << n.id << ','
+            << QString::number(n.x * 1000.0, 'f', 4) << ','
+            << QString::number(n.y * 1000.0, 'f', 4) << ','
+            << QString::number(last_solution_.voltages[i] * 1000.0, 'f', 6)
+            << '\n';
+    }
+    statusBar()->showMessage(
+        QString("Exported %1 nodes to %2")
+            .arg(last_mesh_.nodes.size())
+            .arg(QFileInfo(path).fileName()));
 }

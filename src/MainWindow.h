@@ -4,6 +4,8 @@
 #include <memory>
 
 #include "model/Board.h"
+#include "pi/IrMesher.h"
+#include "pi/IrSolver.h"
 
 class PcbCanvas;
 class LayerPanel;
@@ -26,6 +28,8 @@ protected:
 private slots:
     void onOpenKicadPcb();
     void onAnalyzeStaticIrDrop();
+    void onSaveCanvasImage();
+    void onExportResultsCsv();
 
 private:
     void populateLayerPanel();
@@ -36,4 +40,6 @@ private:
     ColorLegend* legend_;
     QLabel* hover_label_;
     std::unique_ptr<pdnkit::model::Board> board_;
+    pdnkit::pi::IrMesh last_mesh_;
+    pdnkit::pi::Solution last_solution_;
 };
