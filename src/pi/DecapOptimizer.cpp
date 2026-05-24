@@ -91,7 +91,7 @@ DecapOptimizerResult optimize_decaps(
             const auto& lib = kCommonDecaps[k];
             auto [px, py] = slot_position(static_cast<int>(chosen.size()));
             std::vector<Decap> test = chosen;
-            test.push_back({px, py, lib.C, lib.esr, lib.esl});
+            test.push_back({px, py, effective_C(lib), lib.esr, lib.esl});
 
             auto z_test = run_sweep(test);
             const double test_score = excess_score(z_test, opt.target_z);
