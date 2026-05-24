@@ -19,6 +19,7 @@
 
 #include "AnalysisPanel.h"
 #include "ColorLegend.h"
+#include "NetStatsPanel.h"
 #include "LayerPanel.h"
 #include "PcbCanvas.h"
 #include "parser/KicadPcbParser.h"
@@ -61,6 +62,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(analysis_panel_, &AnalysisPanel::clearRequested,
             canvas_, [this]() { canvas_->setIrResult({}); legend_->setRange(0, 0); });
 
+    // Net statistics dock, tabbed with Analysis on the right.
+    netstats_panel_ = new NetStatsPanel(this);
+    auto* nets_dock = new QDockWidget("Net Stats", this);
+    nets_dock->setWidget(netstats_panel_);
+    nets_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    addDockWidget(Qt::RightDockWidgetArea, nets_dock);
+    tabifyDockWidget(an_dock, nets_dock);
+
     auto* fileMenu = menuBar()->addMenu("&File");
     auto* openAct = fileMenu->addAction("&Open KiCad PCB...");
     openAct->setShortcut(QKeySequence::Open);
@@ -80,6 +89,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(fitAct, &QAction::triggered, canvas_, &PcbCanvas::fitToBoard);
     viewMenu->addAction(dock->toggleViewAction());
     viewMenu->addAction(an_dock->toggleViewAction());
+    viewMenu->addAction(nets_dock->toggleViewAction());
 
     auto* analyzeMenu = menuBar()->addMenu("&Analyze");
     auto* irAct = analyzeMenu->addAction("Static &IR drop on F.Cu");
@@ -239,6 +249,7 @@ bool MainWindow::loadKicadPcb(const QString& path) {
         canvas_->setBoard(board_.get());
         populateLayerPanel();
         analysis_panel_->setBoard(board_.get());
+        netstats_panel_->setBoard(board_.get());
 
         spdlog::info("loaded {}: {} layers ({} copper), {} nets, {} segments, "
                      "{} vias, {} pads, {} zones",

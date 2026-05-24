@@ -71,6 +71,7 @@ add_executable(pdnkit
     src/PcbCanvas.cpp
     src/LayerPanel.cpp
     src/AnalysisPanel.cpp
+    src/NetStatsPanel.cpp
     src/ColorLegend.cpp
 )
 target_link_libraries(pdnkit PRIVATE

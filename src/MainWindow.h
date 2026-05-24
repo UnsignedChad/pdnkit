@@ -11,6 +11,7 @@ class PcbCanvas;
 class LayerPanel;
 class AnalysisPanel;
 class ColorLegend;
+class NetStatsPanel;
 class QLabel;
 
 class MainWindow : public QMainWindow {
@@ -37,6 +38,7 @@ private:
     PcbCanvas* canvas_;
     LayerPanel* layer_panel_;
     AnalysisPanel* analysis_panel_;
+    NetStatsPanel* netstats_panel_;
     ColorLegend* legend_;
     QLabel* hover_label_;
     std::unique_ptr<pdnkit::model::Board> board_;
