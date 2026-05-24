@@ -7,6 +7,10 @@
 #include <Eigen/SparseCholesky>
 #include <Eigen/SparseCore>
 
+#ifdef PDNKIT_HAVE_CHOLMOD
+#include <Eigen/CholmodSupport>
+#endif
+
 namespace pdnkit::pi {
 
 Solution IrSolver::solve(const IrMesh& mesh, const SolveConfig& cfg) {
@@ -114,7 +118,11 @@ Solution IrSolver::solve(const IrMesh& mesh, const SolveConfig& cfg) {
     }
 
     // 4) Solve with sparse Cholesky.
+#ifdef PDNKIT_HAVE_CHOLMOD
+    Eigen::CholmodSupernodalLLT<Eigen::SparseMatrix<double>> solver;
+#else
     Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> solver;
+#endif
     solver.compute(G);
     if (solver.info() != Eigen::Success) {
         sol.error = "Cholesky factorization failed (matrix may be singular)";

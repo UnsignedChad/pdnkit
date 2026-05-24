@@ -23,6 +23,20 @@ find_package(Eigen3 REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(CLI11 REQUIRED)
 
+# Optional: CHOLMOD (SuiteSparse) for the supernodal Cholesky solver. Typical
+# 5-20x speedup over Eigen::SimplicialLLT for boards with thousands of nodes.
+# Falls back to pure-Eigen if missing.
+find_library(CHOLMOD_LIBRARY NAMES cholmod)
+find_path(CHOLMOD_INCLUDE_DIR NAMES cholmod.h
+          PATH_SUFFIXES suitesparse)
+if(CHOLMOD_LIBRARY AND CHOLMOD_INCLUDE_DIR)
+    message(STATUS "Found CHOLMOD: ${CHOLMOD_LIBRARY}")
+    set(PDNKIT_HAVE_CHOLMOD ON)
+else()
+    message(STATUS "CHOLMOD not found; using Eigen::SimplicialLLT fallback")
+    set(PDNKIT_HAVE_CHOLMOD OFF)
+endif()
+
 # Core static library: parsing, model, mesher, solver.
 # Linked by both the GUI binary and the test binary.
 add_library(pdnkit_core STATIC
@@ -43,6 +57,11 @@ target_link_libraries(pdnkit_core PUBLIC
     Eigen3::Eigen
     spdlog::spdlog
 )
+if(PDNKIT_HAVE_CHOLMOD)
+    target_compile_definitions(pdnkit_core PUBLIC PDNKIT_HAVE_CHOLMOD)
+    target_include_directories(pdnkit_core PRIVATE ${CHOLMOD_INCLUDE_DIR})
+    target_link_libraries(pdnkit_core PUBLIC ${CHOLMOD_LIBRARY})
+endif()
 target_compile_options(pdnkit_core PRIVATE -Wall -Wextra -Wpedantic)
 
 # GUI executable.
