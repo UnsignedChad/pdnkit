@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <numeric>
 #include <set>
 #include <numbers>
@@ -205,6 +206,107 @@ std::vector<int> nodes_under_pad(const IrMesh& mesh, const model::Pad& pad,
         if (std::abs(lx) <= hw && std::abs(ly) <= hh) out.push_back(n.id);
     }
     return out;
+}
+
+// Build a 1D resistor-graph IrMesh from track segments on (net, layer).
+// Used as a fallback when the zone-based mesher comes up empty (boards
+// that route power via tracks instead of pours). Each segment becomes a
+// single resistor R = rho * L / (W * t); endpoints are de-duped within
+// 1 um. Pads on the net attach to the nearest track node within ~1 mm.
+IrMesh build_track_mesh(const model::Board& board, const MeshConfig& cfg,
+                         int layer_ord) {
+    IrMesh mesh;
+    // Endpoint dedup. Snap to a 1-micrometer grid to merge KiCad-format
+    // 6-decimal coordinate noise.
+    constexpr double kSnap = 1.0e-6;
+    std::map<std::pair<long long, long long>, int> point_to_id;
+    auto key_of = [&](const model::Point2& p) {
+        return std::pair<long long, long long>{
+            static_cast<long long>(std::lround(p.x / kSnap)),
+            static_cast<long long>(std::lround(p.y / kSnap))
+        };
+    };
+    auto get_or_create = [&](const model::Point2& p) {
+        auto k = key_of(p);
+        auto it = point_to_id.find(k);
+        if (it != point_to_id.end()) return it->second;
+        Node n;
+        n.id = static_cast<int>(mesh.nodes.size());
+        n.x = p.x;
+        n.y = p.y;
+        n.layer_ordinal = layer_ord;
+        mesh.nodes.push_back(n);
+        point_to_id[k] = n.id;
+        return n.id;
+    };
+
+    for (const auto& seg : board.segments) {
+        if (seg.net_id != cfg.net_id) continue;
+        if (seg.layer_ordinal != layer_ord) continue;
+        if (seg.width <= 0.0) continue;
+        const double length = std::hypot(seg.end.x - seg.start.x,
+                                          seg.end.y - seg.start.y);
+        if (length <= 0.0) continue;
+        // Per-layer thickness if the stackup supplied one; else cfg fallback.
+        double thickness = cfg.copper_thickness;
+        if (const model::Layer* L = board.find_layer(layer_ord)) {
+            if (L->thickness > 0.0) thickness = L->thickness;
+        }
+        const double R = cfg.copper_rho * length / (seg.width * thickness);
+        if (R <= 0.0) continue;
+        const int a = get_or_create(seg.start);
+        const int b = get_or_create(seg.end);
+        if (a == b) continue;
+        mesh.resistors.push_back({a, b, 1.0 / R});
+    }
+
+    if (mesh.nodes.empty()) return mesh;
+
+    // Bbox.
+    double lo_x = mesh.nodes[0].x, hi_x = lo_x;
+    double lo_y = mesh.nodes[0].y, hi_y = lo_y;
+    for (const auto& n : mesh.nodes) {
+        lo_x = std::min(lo_x, n.x); hi_x = std::max(hi_x, n.x);
+        lo_y = std::min(lo_y, n.y); hi_y = std::max(hi_y, n.y);
+    }
+    mesh.bbox_lo_x = lo_x; mesh.bbox_lo_y = lo_y;
+    mesh.bbox_hi_x = hi_x; mesh.bbox_hi_y = hi_y;
+
+    // Pad -> nearest track node within ~1mm tolerance. Drive source/sink
+    // with the auto-pick (leftmost/rightmost pad on net).
+    auto nearest = [&](double px, double py) {
+        int best = -1;
+        double best_d2 = std::numeric_limits<double>::infinity();
+        for (const auto& n : mesh.nodes) {
+            const double dx = n.x - px;
+            const double dy = n.y - py;
+            const double d2 = dx * dx + dy * dy;
+            if (d2 < best_d2) { best_d2 = d2; best = n.id; }
+        }
+        return std::pair<int, double>{best, best_d2};
+    };
+
+    const model::Pad* src = nullptr;
+    const model::Pad* snk = nullptr;
+    for (const auto& pad : board.pads) {
+        if (pad.net_id != cfg.net_id) continue;
+        bool on_layer = false;
+        for (int o : pad.layer_ordinals) if (o == layer_ord) { on_layer = true; break; }
+        if (!on_layer) continue;
+        if (!src || pad.at.x < src->at.x) src = &pad;
+        if (!snk || pad.at.x > snk->at.x) snk = &pad;
+    }
+    constexpr double kPadTol = 1.0e-3;     // 1 mm
+    constexpr double kPadTol2 = kPadTol * kPadTol;
+    if (src) {
+        auto [nid, d2] = nearest(src->at.x, src->at.y);
+        if (nid >= 0 && d2 <= kPadTol2) mesh.source_node_ids.push_back(nid);
+    }
+    if (snk && snk != src) {
+        auto [nid, d2] = nearest(snk->at.x, snk->at.y);
+        if (nid >= 0 && d2 <= kPadTol2) mesh.sink_node_ids.push_back(nid);
+    }
+    return mesh;
 }
 
 // Drop nodes in components that lack BOTH a source AND a sink, then
@@ -534,6 +636,15 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
     }
 
     if (!mesh.nodes.empty()) mesh.primary_layer_used = primary_layer;
+
+    // Track-based fallback: if no zone-based geometry came back, try
+    // building a 1D resistor graph from track segments on the chosen layer.
+    // Common on boards that route power via traces instead of pours.
+    if (mesh.nodes.empty()) {
+        mesh = build_track_mesh(board, cfg, primary_layer);
+        if (!mesh.nodes.empty()) mesh.primary_layer_used = primary_layer;
+    }
+
     prune_disconnected(mesh);
     if (mesh.nodes.empty()) mesh.primary_layer_used = -1;
     return mesh;
