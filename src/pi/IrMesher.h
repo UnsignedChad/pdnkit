@@ -34,6 +34,12 @@ struct MeshConfig {
     // (R = rho * board_thickness / cross_section). Empty == single-layer.
     std::vector<int> extra_layer_ordinals;
 
+    // If the requested layer_ordinal has no filled zones for net_id, search
+    // every copper layer and switch to the one with the largest zone area
+    // before meshing. Default ON -- the user usually wants an analysis, not
+    // an empty mesh. Set false to enforce strict layer selection.
+    bool auto_select_layer = true;
+
     // Optional explicit source/sink pad selection by pad name. When non-empty,
     // these override the v0 leftmost/rightmost auto-pick. Pads must match
     // (net_id, layer_ordinal) and have the given name.
@@ -80,6 +86,12 @@ struct IrMesh {
     // World-space bbox of the meshed copper (handy for renderers).
     double bbox_lo_x = 0.0, bbox_lo_y = 0.0;
     double bbox_hi_x = 0.0, bbox_hi_y = 0.0;
+
+    // The primary copper layer that the mesher actually built on. Equals
+    // MeshConfig::layer_ordinal in the normal case; differs when
+    // auto_select_layer switched to a different layer with more copper.
+    // -1 if the mesh is empty.
+    int primary_layer_used = -1;
 };
 
 class IrMesher {

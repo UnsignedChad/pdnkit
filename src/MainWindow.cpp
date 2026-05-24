@@ -211,10 +211,13 @@ void MainWindow::onAnalyzeStaticIrDrop() {
         ? QString::fromStdString(net->name)
         : QString("net %1").arg(mc.net_id);
     const double v_drop_mv = (sol.max_v - sol.min_v) * 1000.0;
-    const auto* layer = board_->find_layer(mc.layer_ordinal);
+    const int reported_layer = (mesh.primary_layer_used >= 0)
+        ? mesh.primary_layer_used : mc.layer_ordinal;
+    const auto* layer = board_->find_layer(reported_layer);
     const QString layer_name = layer
-        ? QString::fromStdString(layer->name)
-        : QString("layer %1").arg(mc.layer_ordinal);
+        ? QString::fromStdString(layer->name) +
+            (reported_layer != mc.layer_ordinal ? " (auto)" : "")
+        : QString("layer %1").arg(reported_layer);
     double total_injected = 0.0;
     for (const auto& [_, cur] : mc.pad_currents) {
         if (cur > 0.0) total_injected += cur;

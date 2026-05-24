@@ -50,6 +50,32 @@ bool point_in_target_copper(const model::Board& board, int net, int layer,
     return false;
 }
 
+// Shoelace area of a closed polygon ring (always positive).
+double polygon_ring_area(const std::vector<model::Point2>& ring) {
+    if (ring.size() < 3) return 0.0;
+    double a = 0.0;
+    for (std::size_t i = 0; i < ring.size(); ++i) {
+        const std::size_t j = (i + 1) % ring.size();
+        a += ring[i].x * ring[j].y - ring[j].x * ring[i].y;
+    }
+    return std::abs(a) * 0.5;
+}
+
+// Total filled-zone area for (net, layer) in m^2. Approximates "is there
+// copper to mesh here?" -- holes subtract from the polygon.
+double zone_area_on(const model::Board& board, int net, int layer) {
+    double total = 0.0;
+    for (const auto& z : board.zones) {
+        if (z.net_id != net || z.layer_ordinal != layer) continue;
+        for (const auto& fp : z.filled) {
+            double a = polygon_ring_area(fp.outline);
+            for (const auto& h : fp.holes) a -= polygon_ring_area(h);
+            total += std::max(0.0, a);
+        }
+    }
+    return total;
+}
+
 // World bbox of all filled polygons on the target (net, layer). Returns false
 // if there is no matching geometry.
 bool target_bbox(const model::Board& board, int net, int layer,
@@ -286,8 +312,28 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
         return mesh;
     }
 
+    // Smart layer auto-pick: if the user-requested layer has no copper for
+    // this net, find the copper layer with the most filled-zone area and
+    // switch to it. Keep cfg const externally by working with a local copy.
+    int primary_layer = cfg.layer_ordinal;
+    if (cfg.auto_select_layer) {
+        if (zone_area_on(board, cfg.net_id, primary_layer) <= 0.0) {
+            int best_layer = primary_layer;
+            double best_area = 0.0;
+            for (const auto& L : board.stackup.layers) {
+                if (!L.is_copper()) continue;
+                const double a = zone_area_on(board, cfg.net_id, L.ordinal);
+                if (a > best_area) {
+                    best_area = a;
+                    best_layer = L.ordinal;
+                }
+            }
+            if (best_area > 0.0) primary_layer = best_layer;
+        }
+    }
+
     // Build the ordered list of layers (primary first, then extras).
-    std::vector<int> layers = {cfg.layer_ordinal};
+    std::vector<int> layers = {primary_layer};
     for (int l : cfg.extra_layer_ordinals) {
         bool seen = false;
         for (int e : layers) if (e == l) { seen = true; break; }
@@ -438,7 +484,9 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
         }
     }
 
+    if (!mesh.nodes.empty()) mesh.primary_layer_used = primary_layer;
     prune_disconnected(mesh);
+    if (mesh.nodes.empty()) mesh.primary_layer_used = -1;
     return mesh;
 }
 

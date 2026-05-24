@@ -89,10 +89,19 @@ int run_headless_analysis(const std::string& pcb_path,
     }
 
     const double drop_mv = (sol.max_v - sol.min_v) * 1000.0;
+    std::string reported_layer = layer_name;
+    if (mesh.primary_layer_used >= 0 && mesh.primary_layer_used != layer_ord) {
+        for (const auto& L : board.stackup.layers) {
+            if (L.ordinal == mesh.primary_layer_used) {
+                reported_layer = L.name + std::string("(auto)");
+                break;
+            }
+        }
+    }
     std::printf("pdnkit IR drop  net=%s  layer=%s  current=%.3fA  "
                 "nodes=%zu  resistors=%zu  Vmax=%.6fmV  Vmin=%.6fmV  "
                 "drop=%.6fmV\n",
-                net_name.c_str(), layer_name.c_str(), current,
+                net_name.c_str(), reported_layer.c_str(), current,
                 mesh.nodes.size(), mesh.resistors.size(),
                 sol.max_v * 1000.0, sol.min_v * 1000.0, drop_mv);
     return 0;

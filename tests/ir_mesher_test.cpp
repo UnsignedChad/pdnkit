@@ -348,3 +348,73 @@ TEST_CASE("mesher: prune kills everything if source + sink are on different isla
     // instead of the prior CHOLMOD: matrix not positive definite.
     REQUIRE(m.nodes.empty());
 }
+
+TEST_CASE("mesher: auto_select_layer picks the layer with the most copper", "[irmesh][autopick]") {
+    Board b;
+    b.stackup.layers.push_back({0,  "F.Cu", "signal"});
+    b.stackup.layers.push_back({31, "B.Cu", "signal"});
+    b.nets.push_back({1, "GND"});
+
+    // GND zone ONLY on B.Cu. User asks for F.Cu -- auto-pick should switch.
+    Zone z;
+    z.net_id = 1;
+    z.layer_ordinal = 31;
+    Polygon p;
+    p.outline = {{0, 0}, {0.020, 0}, {0.020, 0.020}, {0, 0.020}};
+    z.filled.push_back(p);
+    b.zones.push_back(z);
+
+    Pad p1; p1.at = {0.002, 0.010}; p1.net_id = 1; p1.layer_ordinals = {0, 31}; p1.name = "A";
+    Pad p2; p2.at = {0.018, 0.010}; p2.net_id = 1; p2.layer_ordinals = {0, 31}; p2.name = "B";
+    b.pads.push_back(p1);
+    b.pads.push_back(p2);
+
+    MeshConfig cfg;
+    cfg.cell_size = 1.0e-3;
+    cfg.net_id = 1;
+    cfg.layer_ordinal = 0;  // ask for F.Cu (which has no zone)
+    cfg.auto_select_layer = true;
+
+    auto m = IrMesher::build(b, cfg);
+    REQUIRE_FALSE(m.nodes.empty());
+    REQUIRE(m.primary_layer_used == 31);  // auto-switched to B.Cu
+    // Every node is on B.Cu.
+    for (const auto& n : m.nodes) REQUIRE(n.layer_ordinal == 31);
+}
+
+TEST_CASE("mesher: auto_select_layer=false enforces the requested layer", "[irmesh][autopick]") {
+    Board b;
+    b.stackup.layers.push_back({0,  "F.Cu", "signal"});
+    b.stackup.layers.push_back({31, "B.Cu", "signal"});
+    b.nets.push_back({1, "GND"});
+
+    Zone z; z.net_id = 1; z.layer_ordinal = 31;
+    Polygon p; p.outline = {{0, 0}, {0.010, 0}, {0.010, 0.010}, {0, 0.010}};
+    z.filled.push_back(p); b.zones.push_back(z);
+
+    MeshConfig cfg;
+    cfg.cell_size = 1.0e-3;
+    cfg.net_id = 1;
+    cfg.layer_ordinal = 0;
+    cfg.auto_select_layer = false;  // strict
+
+    auto m = IrMesher::build(b, cfg);
+    REQUIRE(m.nodes.empty());  // F.Cu has no copper, no fallback
+}
+
+TEST_CASE("mesher: auto_select_layer is a no-op when primary layer already has copper", "[irmesh][autopick]") {
+    Board b = with_square_zone(1, 0, 0.010);  // GND on F.Cu
+    Pad p1; p1.at = {0.001, 0.005}; p1.net_id = 1; p1.layer_ordinals = {0}; p1.name = "A";
+    Pad p2; p2.at = {0.009, 0.005}; p2.net_id = 1; p2.layer_ordinals = {0}; p2.name = "B";
+    b.pads.push_back(p1);
+    b.pads.push_back(p2);
+
+    MeshConfig cfg;
+    cfg.cell_size = 1.0e-3;
+    cfg.net_id = 1;
+    cfg.layer_ordinal = 0;
+    cfg.auto_select_layer = true;
+
+    auto m = IrMesher::build(b, cfg);
+    REQUIRE(m.primary_layer_used == 0);  // stayed on F.Cu
+}
