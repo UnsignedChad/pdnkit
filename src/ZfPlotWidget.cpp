@@ -9,7 +9,7 @@
 #include <QPainterPath>
 
 ZfPlotWidget::ZfPlotWidget(QWidget* parent) : QWidget(parent) {
-    setMinimumSize(360, 200);
+    setMinimumSize(220, 120);
 }
 
 QSize ZfPlotWidget::sizeHint() const { return {480, 280}; }

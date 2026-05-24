@@ -10,7 +10,7 @@
 #include <QPen>
 
 TransientPlotWidget::TransientPlotWidget(QWidget* parent) : QWidget(parent) {
-    setMinimumSize(360, 200);
+    setMinimumSize(220, 120);
 }
 
 QSize TransientPlotWidget::sizeHint() const { return {480, 280}; }

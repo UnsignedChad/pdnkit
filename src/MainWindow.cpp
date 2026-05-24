@@ -11,6 +11,7 @@
 #include <QFileDialog>
 #include <QSettings>
 #include <QHBoxLayout>
+#include <QScrollArea>
 #include <QFileInfo>
 #include <QLabel>
 #include <QMenu>
@@ -35,6 +36,10 @@
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("pdnkit");
+    // Allow the window to shrink small; docks each wrap their contents in
+    // a QScrollArea below, so the panels' tall sizeHints don't force a
+    // floor on the window height.
+    setMinimumSize(480, 320);
     resize(1280, 800);
     setAcceptDrops(true);
 
@@ -51,8 +56,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     // Layer-visibility dock panel on the right.
     layer_panel_ = new LayerPanel(this);
+    auto* layers_scroll = new QScrollArea(this);
+    layers_scroll->setWidget(layer_panel_);
+    layers_scroll->setWidgetResizable(true);
+    layers_scroll->setFrameShape(QFrame::NoFrame);
     auto* dock = new QDockWidget("Layers", this);
-    dock->setWidget(layer_panel_);
+    dock->setWidget(layers_scroll);
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     addDockWidget(Qt::RightDockWidgetArea, dock);
     connect(layer_panel_, &LayerPanel::visibility_changed,
@@ -60,8 +69,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     // Analysis dock under Layers.
     analysis_panel_ = new AnalysisPanel(this);
+    auto* an_scroll = new QScrollArea(this);
+    an_scroll->setWidget(analysis_panel_);
+    an_scroll->setWidgetResizable(true);
+    an_scroll->setFrameShape(QFrame::NoFrame);
     auto* an_dock = new QDockWidget("Analysis", this);
-    an_dock->setWidget(analysis_panel_);
+    an_dock->setWidget(an_scroll);
     an_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     addDockWidget(Qt::RightDockWidgetArea, an_dock);
     connect(analysis_panel_, &AnalysisPanel::runRequested,
@@ -79,8 +92,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     // Net statistics dock, tabbed with Analysis on the right.
     netstats_panel_ = new NetStatsPanel(this);
+    auto* nets_scroll = new QScrollArea(this);
+    nets_scroll->setWidget(netstats_panel_);
+    nets_scroll->setWidgetResizable(true);
+    nets_scroll->setFrameShape(QFrame::NoFrame);
     auto* nets_dock = new QDockWidget("Net Stats", this);
-    nets_dock->setWidget(netstats_panel_);
+    nets_dock->setWidget(nets_scroll);
     nets_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     addDockWidget(Qt::RightDockWidgetArea, nets_dock);
     tabifyDockWidget(an_dock, nets_dock);
@@ -91,8 +108,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             analysis_panel_, &AnalysisPanel::setNetById);
 
     cavity_panel_ = new CavityPanel(this);
+    auto* cav_scroll = new QScrollArea(this);
+    cav_scroll->setWidget(cavity_panel_);
+    cav_scroll->setWidgetResizable(true);
+    cav_scroll->setFrameShape(QFrame::NoFrame);
     auto* cav_dock = new QDockWidget("Plane Z(f)", this);
-    cav_dock->setWidget(cavity_panel_);
+    cav_dock->setWidget(cav_scroll);
     cav_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     addDockWidget(Qt::RightDockWidgetArea, cav_dock);
     tabifyDockWidget(an_dock, cav_dock);
@@ -113,8 +134,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             this, [this](int net_id) {
                 if (transient_panel_) transient_panel_->setNetById(net_id);
             });
+    auto* trn_scroll = new QScrollArea(this);
+    trn_scroll->setWidget(transient_panel_);
+    trn_scroll->setWidgetResizable(true);
+    trn_scroll->setFrameShape(QFrame::NoFrame);
     auto* trn_dock = new QDockWidget("Transient", this);
-    trn_dock->setWidget(transient_panel_);
+    trn_dock->setWidget(trn_scroll);
     trn_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     addDockWidget(Qt::RightDockWidgetArea, trn_dock);
     tabifyDockWidget(an_dock, trn_dock);
