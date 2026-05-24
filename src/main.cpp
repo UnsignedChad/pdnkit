@@ -3,7 +3,9 @@
 #include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <map>
 #include <string>
+#include <tuple>
 
 #include <QApplication>
 #include <QIcon>
@@ -191,6 +193,49 @@ int run_headless_zf(const std::string& pcb_path,
     return 0;
 }
 
+int run_headless_list_nets(const std::string& pcb_path) {
+    pdnkit::model::Board board;
+    try {
+        board = pdnkit::parser::KicadPcbParser::parse_file(pcb_path);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "pdnkit: parse failed: %s\n", e.what());
+        return 2;
+    }
+    // Tally per-net pad / segment / zone counts.
+    std::map<int, std::tuple<int, int, int>> counts;
+    for (const auto& p : board.pads)     std::get<0>(counts[p.net_id])++;
+    for (const auto& s : board.segments) std::get<1>(counts[s.net_id])++;
+    for (const auto& z : board.zones)    std::get<2>(counts[z.net_id])++;
+
+    std::printf("net_id,net_name,pads,segments,zones\n");
+    for (const auto& n : board.nets) {
+        auto it = counts.find(n.id);
+        const int p = it == counts.end() ? 0 : std::get<0>(it->second);
+        const int s = it == counts.end() ? 0 : std::get<1>(it->second);
+        const int z = it == counts.end() ? 0 : std::get<2>(it->second);
+        std::printf("%d,%s,%d,%d,%d\n",
+                    n.id, n.name.c_str(), p, s, z);
+    }
+    return 0;
+}
+
+int run_headless_list_layers(const std::string& pcb_path) {
+    pdnkit::model::Board board;
+    try {
+        board = pdnkit::parser::KicadPcbParser::parse_file(pcb_path);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "pdnkit: parse failed: %s\n", e.what());
+        return 2;
+    }
+    std::printf("ordinal,name,type,is_copper,thickness_um\n");
+    for (const auto& L : board.stackup.layers) {
+        std::printf("%d,%s,%s,%d,%.2f\n",
+                    L.ordinal, L.name.c_str(), L.type.c_str(),
+                    L.is_copper() ? 1 : 0, L.thickness * 1.0e6);
+    }
+    return 0;
+}
+
 int run_headless_transient(const std::string& pcb_path,
                            const std::string& net_name,
                            const std::string& layer_name,
@@ -308,6 +353,15 @@ int main(int argc, char** argv) {
     cli.add_option("--points", zf_points, "Number of log-spaced frequency points");
     cli.add_option("--modes", zf_modes, "Mode sum truncation per axis");
 
+    bool list_nets = false;
+    bool list_layers = false;
+    cli.add_flag("--list-nets", list_nets,
+                 "Print all nets in the board as CSV "
+                 "(net_id,net_name,pads,segments,zones) and exit.");
+    cli.add_flag("--list-layers", list_layers,
+                 "Print the layer stackup as CSV "
+                 "(ordinal,name,type,is_copper,thickness_um) and exit.");
+
     bool transient = false;
     double trn_dt_ns = 10.0;
     int trn_steps = 1000;
@@ -341,6 +395,20 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    if (list_nets) {
+        if (pcb_path.empty()) {
+            std::fprintf(stderr, "pdnkit: --list-nets requires a board file\n");
+            return 1;
+        }
+        return run_headless_list_nets(pcb_path);
+    }
+    if (list_layers) {
+        if (pcb_path.empty()) {
+            std::fprintf(stderr, "pdnkit: --list-layers requires a board file\n");
+            return 1;
+        }
+        return run_headless_list_layers(pcb_path);
+    }
     if (analyze) {
         if (pcb_path.empty()) {
             std::fprintf(stderr,
