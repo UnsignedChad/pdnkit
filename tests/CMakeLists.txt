@@ -4,6 +4,7 @@ include(Catch)
 add_executable(pdnkit_tests
     smoke_test.cpp
     sexpr_test.cpp
+    model_test.cpp
 )
 
 target_link_libraries(pdnkit_tests PRIVATE
