@@ -53,6 +53,7 @@ bool MainWindow::loadKicadPcb(const QString& path) {
             [](const auto& l) { return l.is_copper(); });
 
         board_ = std::move(board);
+        canvas_->setBoard(board_.get());
 
         spdlog::info("loaded {}: {} layers ({} copper), {} nets, {} segments, "
                      "{} vias, {} pads, {} zones",
