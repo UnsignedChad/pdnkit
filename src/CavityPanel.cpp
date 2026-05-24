@@ -159,6 +159,11 @@ CavityPanel::CavityPanel(QWidget* parent) : QWidget(parent) {
     form->addRow("", overlay_bare_check_);
     outer->addLayout(form);
 
+    plane_info_label_ = new QLabel("Plane: (no board)");
+    plane_info_label_->setStyleSheet("color: #aaa;");
+    plane_info_label_->setWordWrap(true);
+    outer->addWidget(plane_info_label_);
+
     auto* decaps_label = new QLabel("Decoupling capacitors:");
     outer->addWidget(decaps_label);
     decap_table_ = new QTableWidget(0, 5);
@@ -194,7 +199,7 @@ CavityPanel::CavityPanel(QWidget* parent) : QWidget(parent) {
     outer->addWidget(plot_, 1);
 
     connect(net_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, [this](int){ emitCavity(); });
+            this, [this](int){ emitCavity(); updatePlaneInfo(); });
     connect(port1_x_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, [this](double){ emitCavity(); });
     connect(port1_y_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
@@ -238,6 +243,31 @@ void CavityPanel::onRemoveDecap() {
 
 namespace {
 
+// Shoelace polygon area; needed for fill-ratio diagnostic.
+double polygon_ring_area(const std::vector<pdnkit::model::Point2>& ring) {
+    if (ring.size() < 3) return 0.0;
+    double a = 0.0;
+    for (std::size_t i = 0; i < ring.size(); ++i) {
+        const std::size_t j = (i + 1) % ring.size();
+        a += ring[i].x * ring[j].y - ring[j].x * ring[i].y;
+    }
+    return std::abs(a) * 0.5;
+}
+
+// Total filled-zone area for (net, layer) in m^2 (outline minus holes).
+double zone_filled_area(const pdnkit::model::Board& b, int net, int layer) {
+    double total = 0.0;
+    for (const auto& z : b.zones) {
+        if (z.net_id != net || z.layer_ordinal != layer) continue;
+        for (const auto& fp : z.filled) {
+            double a = polygon_ring_area(fp.outline);
+            for (const auto& h : fp.holes) a -= polygon_ring_area(h);
+            total += std::max(0.0, a);
+        }
+    }
+    return total;
+}
+
 std::vector<pdnkit::model::Point2> port_positions(double p1x_mm, double p1y_mm,
                                                    double p2x_mm, double p2y_mm,
                                                    double offset_x_m, double offset_y_m) {
@@ -274,6 +304,45 @@ void CavityPanel::setBoard(const pdnkit::model::Board* board) {
     rebuildNetCombo();
     plot_->clear();
     emitCavity();
+    updatePlaneInfo();
+}
+
+void CavityPanel::updatePlaneInfo() {
+    if (!board_ || net_combo_->count() == 0) {
+        plane_info_label_->setText("Plane: (no net selected)");
+        plane_info_label_->setStyleSheet("color: #aaa;");
+        return;
+    }
+    const int net = net_combo_->currentData().toInt();
+    constexpr int kPrimaryLayer = 0;
+    const Bbox bb = zone_bbox(*board_, net, kPrimaryLayer);
+    if (!bb.ok) {
+        plane_info_label_->setText("Plane: no filled zone on F.Cu for this net");
+        plane_info_label_->setStyleSheet("color: #d80;");
+        return;
+    }
+    const double a_mm = (bb.hi_x - bb.lo_x) * 1000.0;
+    const double b_mm = (bb.hi_y - bb.lo_y) * 1000.0;
+    const double bbox_area = (bb.hi_x - bb.lo_x) * (bb.hi_y - bb.lo_y);
+    const double fill_area = zone_filled_area(*board_, net, kPrimaryLayer);
+    const double ratio = (bbox_area > 0.0) ? (fill_area / bbox_area) : 0.0;
+    const int pct = static_cast<int>(std::round(ratio * 100.0));
+
+    QString msg = QString("Plane: %1 x %2 mm  fill %3%%  ")
+                      .arg(a_mm, 0, 'f', 1)
+                      .arg(b_mm, 0, 'f', 1)
+                      .arg(pct);
+    if (ratio >= 0.85) {
+        msg += "(cavity model OK)";
+        plane_info_label_->setStyleSheet("color: #8c8;");
+    } else if (ratio >= 0.55) {
+        msg += "(approximate — cavity assumes rectangular plane)";
+        plane_info_label_->setStyleSheet("color: #d80; font-weight: bold;");
+    } else {
+        msg += "(NON-RECTANGULAR — Z(f) is a rough bound only)";
+        plane_info_label_->setStyleSheet("color: #d44; font-weight: bold;");
+    }
+    plane_info_label_->setText(msg);
 }
 
 void CavityPanel::rebuildNetCombo() {

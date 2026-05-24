@@ -43,6 +43,7 @@ private slots:
 
 private:
     void emitCavity();
+    void updatePlaneInfo();
     void rebuildNetCombo();
 
     const pdnkit::model::Board* board_ = nullptr;
@@ -64,6 +65,7 @@ private:
     QPushButton* save_btn_;
     QPushButton* add_decap_btn_;
     QPushButton* remove_decap_btn_;
+    class QLabel* plane_info_label_;
     QPushButton* auto_decap_btn_;
     QTableWidget* decap_table_;
     ZfPlotWidget* plot_;
