@@ -93,3 +93,73 @@ TEST_CASE("cavity: sweep returns vector of expected length", "[cavity]") {
         REQUIRE(m >= 0.0);
     }
 }
+
+
+TEST_CASE("cavity: empty decap list equals plain self-impedance", "[cavity][decap]") {
+    CavityConfig cfg;
+    cfg.max_modes = 20;
+    const double omega = 2.0 * kPi * 1.0e7;
+    auto z_plain = pdnkit::pi::cavity_impedance(cfg, 0.05, 0.05, 0.05, 0.05, omega);
+    auto z_zero  = pdnkit::pi::cavity_impedance_with_decaps(cfg, 0.05, 0.05, {}, omega);
+    REQUIRE(std::abs(z_plain - z_zero) / std::abs(z_plain) < 1e-12);
+}
+
+TEST_CASE("cavity: nearby decap pulls Z toward the parallel combination", "[cavity][decap]") {
+    // Co-located ports make the cavity Z-matrix singular (rank-deficient);
+    // real PCB layouts never have a decap at the exact observation pin --
+    // there is always at least a few mm of trace. We offset the decap by
+    // ~1 cell and verify the result is closer to (plane || cap) than to
+    // plane alone.
+    CavityConfig cfg;
+    cfg.max_modes = 30;
+    cfg.tan_delta = 0.005;
+    const double omega = 2.0 * kPi * 1.0e7;
+    const double xo = 0.05, yo = 0.05;
+
+    auto z_plain = pdnkit::pi::cavity_impedance(cfg, xo, yo, xo, yo, omega);
+
+    pdnkit::pi::Decap d{xo + 0.005, yo, 100.0e-9, 0.0, 0.0};  // 5mm offset
+    auto z_dec = pdnkit::pi::cavity_impedance_with_decaps(cfg, xo, yo, {d}, omega);
+
+    const std::complex<double> j(0, 1);
+    const auto y_parallel = 1.0 / z_plain + j * omega * d.C;
+    const auto z_parallel = 1.0 / y_parallel;
+
+    REQUIRE(std::abs(z_dec - z_parallel) < std::abs(z_dec - z_plain));
+}
+
+TEST_CASE("cavity: adding a decap reduces |Z| in the cap-dominant band", "[cavity][decap]") {
+    CavityConfig cfg;
+    cfg.max_modes = 20;
+    cfg.tan_delta = 0.005;
+
+    // In the 10 MHz range a 1 uF decap with low ESR/ESL has |Z_cap| << plane |Z|,
+    // so adding it must drop |Z_total| below the bare-plane value.
+    const double omega = 2.0 * kPi * 1.0e7;
+    const double xo = 0.05, yo = 0.05;
+
+    auto z_plain = std::abs(pdnkit::pi::cavity_impedance(cfg, xo, yo, xo, yo, omega));
+
+    pdnkit::pi::Decap d{xo + 0.005, yo, 1.0e-6, 0.005, 0.5e-9};  // 5mm offset
+    auto z_with  = std::abs(pdnkit::pi::cavity_impedance_with_decaps(cfg, xo, yo, {d}, omega));
+
+    REQUIRE(z_with < z_plain);
+}
+
+TEST_CASE("cavity: decap sweep magnitudes finite + non-negative", "[cavity][decap]") {
+    CavityConfig cfg;
+    cfg.max_modes = 10;
+    std::vector<pdnkit::pi::Decap> dec{
+        {0.04, 0.04, 1.0e-6, 0.005, 0.5e-9},
+        {0.06, 0.06, 0.1e-6, 0.020, 0.3e-9},
+    };
+    std::vector<double> freqs;
+    for (int i = 0; i < 25; ++i) freqs.push_back(1.0e6 * (i + 1));
+    auto mags = pdnkit::pi::cavity_impedance_with_decaps_magnitude_sweep(
+        cfg, 0.05, 0.05, dec, freqs);
+    REQUIRE(mags.size() == freqs.size());
+    for (double m : mags) {
+        REQUIRE(std::isfinite(m));
+        REQUIRE(m >= 0.0);
+    }
+}

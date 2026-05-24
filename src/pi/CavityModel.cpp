@@ -1,5 +1,7 @@
 #include "pi/CavityModel.h"
 
+#include <Eigen/Dense>
+
 #include <cmath>
 #include <numbers>
 
@@ -60,6 +62,60 @@ std::vector<double> cavity_impedance_magnitude_sweep(
     for (double f : freqs_hz) {
         const double omega = 2.0 * std::numbers::pi * f;
         out.push_back(std::abs(cavity_impedance(cfg, x1, y1, x2, y2, omega)));
+    }
+    return out;
+}
+
+
+
+std::complex<double> cavity_impedance_with_decaps(
+    const CavityConfig& cfg,
+    double xo, double yo,
+    const std::vector<Decap>& decaps,
+    double omega) {
+    using cd = std::complex<double>;
+    const int N = static_cast<int>(decaps.size());
+
+    if (N == 0) return cavity_impedance(cfg, xo, yo, xo, yo, omega);
+
+    auto port_x = [&](int i) { return (i == 0) ? xo : decaps[i - 1].x; };
+    auto port_y = [&](int i) { return (i == 0) ? yo : decaps[i - 1].y; };
+
+    Eigen::MatrixXcd Z(N + 1, N + 1);
+    for (int i = 0; i <= N; ++i) {
+        for (int j = i; j <= N; ++j) {
+            const cd z = cavity_impedance(cfg, port_x(i), port_y(i),
+                                          port_x(j), port_y(j), omega);
+            Z(i, j) = z;
+            Z(j, i) = z;  // reciprocity
+        }
+    }
+
+    Eigen::MatrixXcd Y = Z.inverse();
+
+    const cd j(0.0, 1.0);
+    for (int k = 0; k < N; ++k) {
+        const auto& d = decaps[k];
+        // Z_decap(omega) = ESR + jw*ESL - j/(wC).
+        if (d.C <= 0.0) continue;
+        const cd z_dec = d.esr + j * omega * d.esl - j / (omega * d.C);
+        if (std::abs(z_dec) > 0.0) Y(k + 1, k + 1) += 1.0 / z_dec;
+    }
+
+    Eigen::MatrixXcd Z_new = Y.inverse();
+    return Z_new(0, 0);
+}
+
+std::vector<double> cavity_impedance_with_decaps_magnitude_sweep(
+    const CavityConfig& cfg,
+    double xo, double yo,
+    const std::vector<Decap>& decaps,
+    const std::vector<double>& freqs_hz) {
+    std::vector<double> out;
+    out.reserve(freqs_hz.size());
+    for (double f : freqs_hz) {
+        const double omega = 2.0 * std::numbers::pi * f;
+        out.push_back(std::abs(cavity_impedance_with_decaps(cfg, xo, yo, decaps, omega)));
     }
     return out;
 }

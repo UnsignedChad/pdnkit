@@ -10,6 +10,7 @@ class QComboBox;
 class QDoubleSpinBox;
 class QPushButton;
 class QSpinBox;
+class QTableWidget;
 class ZfPlotWidget;
 
 // Dockable panel that runs a cavity-model Z(f) sweep on the loaded board.
@@ -27,6 +28,8 @@ private slots:
     void onRun();
     void onClear();
     void onSaveCsv();
+    void onAddDecap();
+    void onRemoveDecap();
 
 private:
     void rebuildNetCombo();
@@ -46,6 +49,9 @@ private:
     QPushButton* run_btn_;
     QPushButton* clear_btn_;
     QPushButton* save_btn_;
+    QPushButton* add_decap_btn_;
+    QPushButton* remove_decap_btn_;
+    QTableWidget* decap_table_;
     ZfPlotWidget* plot_;
 
     // Cache of the latest sweep for CSV export.

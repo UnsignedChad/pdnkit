@@ -1,5 +1,6 @@
 #include "CavityPanel.h"
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 #include <set>
@@ -15,7 +16,10 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QHeaderView>
 #include <QSpinBox>
+#include <QTableWidget>
+#include <QTableWidgetItem>
 #include <QVBoxLayout>
 
 #include "ZfPlotWidget.h"
@@ -127,6 +131,23 @@ CavityPanel::CavityPanel(QWidget* parent) : QWidget(parent) {
     form->addRow("Modes:",     modes_spin_);
     outer->addLayout(form);
 
+    auto* decaps_label = new QLabel("Decoupling capacitors:");
+    outer->addWidget(decaps_label);
+    decap_table_ = new QTableWidget(0, 5);
+    decap_table_->setHorizontalHeaderLabels(
+        {"X (mm)", "Y (mm)", "C (uF)", "ESR (mOhm)", "ESL (nH)"});
+    decap_table_->verticalHeader()->setVisible(false);
+    decap_table_->setMaximumHeight(120);
+    decap_table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    outer->addWidget(decap_table_);
+
+    auto* dec_btn_row = new QHBoxLayout();
+    add_decap_btn_    = new QPushButton("Add decap");
+    remove_decap_btn_ = new QPushButton("Remove selected");
+    dec_btn_row->addWidget(add_decap_btn_);
+    dec_btn_row->addWidget(remove_decap_btn_);
+    outer->addLayout(dec_btn_row);
+
     auto* btn_row = new QHBoxLayout();
     run_btn_   = new QPushButton("Run sweep");
     save_btn_  = new QPushButton("Save CSV...");
@@ -142,6 +163,28 @@ CavityPanel::CavityPanel(QWidget* parent) : QWidget(parent) {
     connect(run_btn_,   &QPushButton::clicked, this, &CavityPanel::onRun);
     connect(save_btn_,  &QPushButton::clicked, this, &CavityPanel::onSaveCsv);
     connect(clear_btn_, &QPushButton::clicked, this, &CavityPanel::onClear);
+    connect(add_decap_btn_,    &QPushButton::clicked, this, &CavityPanel::onAddDecap);
+    connect(remove_decap_btn_, &QPushButton::clicked, this, &CavityPanel::onRemoveDecap);
+}
+
+void CavityPanel::onAddDecap() {
+    const int row = decap_table_->rowCount();
+    decap_table_->insertRow(row);
+    // Defaults: at plane center, 1uF, 5 mOhm ESR, 0.5nH ESL.
+    decap_table_->setItem(row, 0, new QTableWidgetItem(QString::number(0.0)));
+    decap_table_->setItem(row, 1, new QTableWidgetItem(QString::number(0.0)));
+    decap_table_->setItem(row, 2, new QTableWidgetItem(QString::number(1.0)));     // 1 uF
+    decap_table_->setItem(row, 3, new QTableWidgetItem(QString::number(5.0)));     // 5 mOhm
+    decap_table_->setItem(row, 4, new QTableWidgetItem(QString::number(0.5)));     // 0.5 nH
+}
+
+void CavityPanel::onRemoveDecap() {
+    auto rows = decap_table_->selectionModel()->selectedRows();
+    // Remove in descending order so indices stay valid.
+    std::vector<int> idx;
+    for (auto& r : rows) idx.push_back(r.row());
+    std::sort(idx.rbegin(), idx.rend());
+    for (int r : idx) decap_table_->removeRow(r);
 }
 
 void CavityPanel::setBoard(const pdnkit::model::Board* board) {
@@ -201,7 +244,34 @@ void CavityPanel::onRun() {
         const double t = (N == 1) ? 0.0 : static_cast<double>(i) / (N - 1);
         freqs.push_back(std::pow(10.0, log_lo + t * (log_hi - log_lo)));
     }
-    auto mags = pdnkit::pi::cavity_impedance_magnitude_sweep(cfg, x1, y1, x2, y2, freqs);
+    // Collect decaps from the table; treat blank cells as 0.
+    std::vector<pdnkit::pi::Decap> decaps;
+    for (int row = 0; row < decap_table_->rowCount(); ++row) {
+        auto read = [&](int col) -> double {
+            auto* item = decap_table_->item(row, col);
+            return item ? item->text().toDouble() : 0.0;
+        };
+        pdnkit::pi::Decap d;
+        d.x   = read(0) * 1.0e-3;   // mm -> m
+        d.y   = read(1) * 1.0e-3;
+        d.C   = read(2) * 1.0e-6;   // uF -> F
+        d.esr = read(3) * 1.0e-3;   // mOhm -> Ohm
+        d.esl = read(4) * 1.0e-9;   // nH -> H
+        if (d.C > 0.0) decaps.push_back(d);
+    }
+
+    std::vector<double> mags;
+    if (decaps.empty()) {
+        // Plain self/transfer impedance between port1 and port2.
+        mags = pdnkit::pi::cavity_impedance_magnitude_sweep(
+            cfg, x1, y1, x2, y2, freqs);
+    } else {
+        // With decaps the panel computes self-impedance at port1 only.
+        // (Transfer impedance with decaps requires a 2+N-port treatment;
+        // that lands when we expose multiple observation ports.)
+        mags = pdnkit::pi::cavity_impedance_with_decaps_magnitude_sweep(
+            cfg, x1, y1, decaps, freqs);
+    }
     last_freqs_ = freqs;
     last_mags_  = mags;
     plot_->setData(std::move(freqs), std::move(mags));

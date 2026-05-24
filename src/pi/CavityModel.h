@@ -49,4 +49,30 @@ std::vector<double> cavity_impedance_magnitude_sweep(
     double x1, double y1, double x2, double y2,
     const std::vector<double>& freqs_hz);
 
+// One decoupling capacitor mounted somewhere on the plane.
+struct Decap {
+    double x = 0.0;     // position, meters (plane-local origin)
+    double y = 0.0;
+    double C  = 1.0e-6; // capacitance (F)
+    double esr = 0.005; // equivalent series resistance (ohms)
+    double esl = 0.5e-9;// equivalent series inductance (H)
+};
+
+// Self-impedance at the observation port (xo, yo) with N decaps mounted at
+// decaps[k].(x,y). Builds the (N+1)x(N+1) Z-matrix from cavity_impedance,
+// inverts to Y, adds each decap admittance on the diagonal, re-inverts, and
+// returns Z'[0,0]. N small (<= ~30 in practice).
+std::complex<double> cavity_impedance_with_decaps(
+    const CavityConfig& cfg,
+    double xo, double yo,
+    const std::vector<Decap>& decaps,
+    double omega);
+
+// |Z| sweep with decaps.
+std::vector<double> cavity_impedance_with_decaps_magnitude_sweep(
+    const CavityConfig& cfg,
+    double xo, double yo,
+    const std::vector<Decap>& decaps,
+    const std::vector<double>& freqs_hz);
+
 }  // namespace pdnkit::pi
