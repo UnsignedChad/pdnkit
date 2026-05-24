@@ -24,6 +24,12 @@ public:
     void setLayerVisibility(int ordinal, bool visible);
     void fitToBoard();
 
+    // Persist / restore the cameras center and zoom across launches.
+    // QSettings is passed by reference so MainWindow can group with its own
+    // geometry/state save under a common organisation/app namespace.
+    void saveSettings(class QSettings& settings) const;
+    void restoreSettings(class QSettings& settings);
+
     // Attach (or clear, with an empty mesh) an IR-drop heat-map overlay.
     // Uploaded lazily on the next paintGL.
     void setIrResult(pdnkit::render::IrResultMesh result);

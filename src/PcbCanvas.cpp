@@ -7,6 +7,7 @@
 #include <QMatrix4x4>
 #include <QMouseEvent>
 #include <QVector4D>
+#include <QSettings>
 #include <QWheelEvent>
 
 #include "model/HitTest.h"
@@ -378,4 +379,22 @@ void PcbCanvas::wheelEvent(QWheelEvent* e) {
     const QPointF pos = e->position();
     camera_.zoom_at(pos.x(), pos.y(), factor, width(), height());
     update();
+}
+
+void PcbCanvas::saveSettings(QSettings& settings) const {
+    settings.setValue("canvas/center_x", camera_.center.x);
+    settings.setValue("canvas/center_y", camera_.center.y);
+    settings.setValue("canvas/pixels_per_meter", camera_.pixels_per_meter);
+}
+
+void PcbCanvas::restoreSettings(QSettings& settings) {
+    bool ok_x = false, ok_y = false, ok_z = false;
+    const double cx = settings.value("canvas/center_x").toDouble(&ok_x);
+    const double cy = settings.value("canvas/center_y").toDouble(&ok_y);
+    const double ppm = settings.value("canvas/pixels_per_meter").toDouble(&ok_z);
+    if (ok_x && ok_y && ok_z && ppm > 0.0) {
+        camera_.center = {cx, cy};
+        camera_.pixels_per_meter = ppm;
+        update();
+    }
 }

@@ -20,6 +20,9 @@ public:
     // Returns true on success.
     bool loadKicadPcb(const QString& path);
 
+protected:
+    void closeEvent(QCloseEvent* e) override;
+
 private slots:
     void onOpenKicadPcb();
     void onAnalyzeStaticIrDrop();

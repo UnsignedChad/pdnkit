@@ -3,7 +3,9 @@
 #include <algorithm>
 
 #include <QDockWidget>
+#include <QCloseEvent>
 #include <QFileDialog>
+#include <QSettings>
 #include <QHBoxLayout>
 #include <QFileInfo>
 #include <QLabel>
@@ -87,6 +89,24 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(canvas_, &PcbCanvas::hoverInfo, hover_label_, &QLabel::setText);
 
     statusBar()->showMessage("Ready");
+
+    // Restore previously-saved window geometry + dock state + camera.
+    QSettings settings("pdnkit", "pdnkit");
+    if (auto geom = settings.value("window/geometry").toByteArray(); !geom.isEmpty()) {
+        restoreGeometry(geom);
+    }
+    if (auto st = settings.value("window/state").toByteArray(); !st.isEmpty()) {
+        restoreState(st);
+    }
+    canvas_->restoreSettings(settings);
+}
+
+void MainWindow::closeEvent(QCloseEvent* e) {
+    QSettings settings("pdnkit", "pdnkit");
+    settings.setValue("window/geometry", saveGeometry());
+    settings.setValue("window/state", saveState());
+    canvas_->saveSettings(settings);
+    QMainWindow::closeEvent(e);
 }
 
 void MainWindow::onOpenKicadPcb() {
