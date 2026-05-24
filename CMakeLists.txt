@@ -28,6 +28,7 @@ find_package(CLI11 REQUIRED)
 add_library(pdnkit_core STATIC
     src/sexpr/SExpr.cpp
     src/parser/KicadPcbParser.cpp
+    src/render/Camera2D.cpp
 )
 target_include_directories(pdnkit_core PUBLIC src)
 target_link_libraries(pdnkit_core PUBLIC

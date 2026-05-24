@@ -6,6 +6,7 @@ add_executable(pdnkit_tests
     sexpr_test.cpp
     model_test.cpp
     parser_test.cpp
+    camera_test.cpp
 )
 
 target_link_libraries(pdnkit_tests PRIVATE
