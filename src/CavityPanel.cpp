@@ -16,6 +16,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QCheckBox>
 #include <QHeaderView>
 #include <QSpinBox>
 #include <QTableWidget>
@@ -129,6 +130,18 @@ CavityPanel::CavityPanel(QWidget* parent) : QWidget(parent) {
     form->addRow("f_max:",     f_max_spin_);
     form->addRow("Points:",    points_spin_);
     form->addRow("Modes:",     modes_spin_);
+
+    target_z_spin_ = new QDoubleSpinBox();
+    target_z_spin_->setRange(0.0, 1000.0);
+    target_z_spin_->setDecimals(3);
+    target_z_spin_->setValue(0.025);  // 25 mOhm, a common PDN target
+    target_z_spin_->setSuffix(" ohm");
+    target_z_spin_->setSingleStep(0.005);
+    form->addRow("Target Z:", target_z_spin_);
+
+    overlay_bare_check_ = new QCheckBox("Overlay bare plane");
+    overlay_bare_check_->setChecked(true);
+    form->addRow("", overlay_bare_check_);
     outer->addLayout(form);
 
     auto* decaps_label = new QLabel("Decoupling capacitors:");
@@ -260,21 +273,45 @@ void CavityPanel::onRun() {
         if (d.C > 0.0) decaps.push_back(d);
     }
 
-    std::vector<double> mags;
+    std::vector<ZfPlotWidget::Curve> curves;
+
+    std::vector<double> mags_main;
     if (decaps.empty()) {
-        // Plain self/transfer impedance between port1 and port2.
-        mags = pdnkit::pi::cavity_impedance_magnitude_sweep(
+        mags_main = pdnkit::pi::cavity_impedance_magnitude_sweep(
             cfg, x1, y1, x2, y2, freqs);
+        ZfPlotWidget::Curve c;
+        c.freqs = freqs;
+        c.mags  = mags_main;
+        c.color = QColor(0xfd, 0xe7, 0x25);   // viridis yellow
+        c.label = "Z(f)";
+        curves.push_back(std::move(c));
     } else {
-        // With decaps the panel computes self-impedance at port1 only.
-        // (Transfer impedance with decaps requires a 2+N-port treatment;
-        // that lands when we expose multiple observation ports.)
-        mags = pdnkit::pi::cavity_impedance_with_decaps_magnitude_sweep(
+        mags_main = pdnkit::pi::cavity_impedance_with_decaps_magnitude_sweep(
             cfg, x1, y1, decaps, freqs);
+        ZfPlotWidget::Curve c;
+        c.freqs = freqs;
+        c.mags  = mags_main;
+        c.color = QColor(0xfd, 0xe7, 0x25);
+        c.label = "with decaps";
+        curves.push_back(std::move(c));
+
+        // Overlay bare plane Z if requested.
+        if (overlay_bare_check_->isChecked()) {
+            auto mags_bare = pdnkit::pi::cavity_impedance_magnitude_sweep(
+                cfg, x1, y1, x1, y1, freqs);
+            ZfPlotWidget::Curve b;
+            b.freqs = freqs;
+            b.mags  = mags_bare;
+            b.color = QColor(0x77, 0x88, 0xaa);  // muted blue-gray
+            b.label = "bare plane";
+            curves.push_back(std::move(b));
+        }
     }
+
     last_freqs_ = freqs;
-    last_mags_  = mags;
-    plot_->setData(std::move(freqs), std::move(mags));
+    last_mags_  = mags_main;
+    plot_->setTargetImpedance(target_z_spin_->value());
+    plot_->setCurves(std::move(curves));
 }
 
 void CavityPanel::onSaveCsv() {

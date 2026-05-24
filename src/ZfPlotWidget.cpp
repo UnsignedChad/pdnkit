@@ -16,14 +16,27 @@ QSize ZfPlotWidget::sizeHint() const { return {480, 280}; }
 
 void ZfPlotWidget::setData(std::vector<double> freqs_hz,
                             std::vector<double> z_mag_ohm) {
-    freqs_ = std::move(freqs_hz);
-    mags_  = std::move(z_mag_ohm);
+    Curve c;
+    c.freqs = std::move(freqs_hz);
+    c.mags  = std::move(z_mag_ohm);
+    c.color = QColor(0xfd, 0xe7, 0x25);
+    curves_.clear();
+    curves_.push_back(std::move(c));
+    update();
+}
+
+void ZfPlotWidget::setCurves(std::vector<Curve> curves) {
+    curves_ = std::move(curves);
+    update();
+}
+
+void ZfPlotWidget::setTargetImpedance(double z_ohm) {
+    target_z_ = z_ohm;
     update();
 }
 
 void ZfPlotWidget::clear() {
-    freqs_.clear();
-    mags_.clear();
+    curves_.clear();
     update();
 }
 
@@ -57,25 +70,34 @@ void ZfPlotWidget::paintEvent(QPaintEvent*) {
     const int plot_h = height() - margin_top - margin_bottom;
     if (plot_w < 50 || plot_h < 40) return;
 
-    if (freqs_.size() < 2 || freqs_.size() != mags_.size()) {
+    bool any = false;
+    for (const auto& c : curves_) {
+        if (c.freqs.size() >= 2 && c.freqs.size() == c.mags.size()) { any = true; break; }
+    }
+    if (!any) {
         p.setPen(QColor(140, 140, 140));
         p.drawText(rect(), Qt::AlignCenter, "no Z(f) data");
         return;
     }
 
-    // Log-log axis ranges. Pad y a little so the curve doesn't touch the
-    // axes. Skip any non-positive data point silently.
+    // Log-log axis ranges across all curves (and target line if set).
     double f_min = std::numeric_limits<double>::infinity();
     double f_max = -std::numeric_limits<double>::infinity();
     double z_min = std::numeric_limits<double>::infinity();
     double z_max = -std::numeric_limits<double>::infinity();
-    for (std::size_t i = 0; i < freqs_.size(); ++i) {
-        const double f = freqs_[i], z = mags_[i];
-        if (f <= 0.0 || z <= 0.0) continue;
-        f_min = std::min(f_min, f);
-        f_max = std::max(f_max, f);
-        z_min = std::min(z_min, z);
-        z_max = std::max(z_max, z);
+    for (const auto& c : curves_) {
+        for (std::size_t i = 0; i < c.freqs.size(); ++i) {
+            const double f = c.freqs[i], z = c.mags[i];
+            if (f <= 0.0 || z <= 0.0) continue;
+            f_min = std::min(f_min, f);
+            f_max = std::max(f_max, f);
+            z_min = std::min(z_min, z);
+            z_max = std::max(z_max, z);
+        }
+    }
+    if (target_z_ > 0.0) {
+        z_min = std::min(z_min, target_z_);
+        z_max = std::max(z_max, target_z_);
     }
     if (!(f_max > f_min) || !(z_max > z_min)) return;
 
@@ -126,16 +148,42 @@ void ZfPlotWidget::paintEvent(QPaintEvent*) {
     p.drawText(QRect(margin_left + plot_w - 80, margin_top + plot_h + 4, 80, 16),
                Qt::AlignRight, fmt_freq(f_max));
 
-    // Curve.
-    p.setPen(QPen(QColor(0xfd, 0xe7, 0x25), 1.5));  // viridis-yellow
-    QPainterPath path;
-    bool started = false;
-    for (std::size_t i = 0; i < freqs_.size(); ++i) {
-        const double freq = freqs_[i], z = mags_[i];
-        if (freq <= 0.0 || z <= 0.0) continue;
-        const QPointF pt(map_x(freq), map_y(z));
-        if (!started) { path.moveTo(pt); started = true; }
-        else            path.lineTo(pt);
+    // Target line.
+    if (target_z_ > 0.0) {
+        const double y = map_y(target_z_);
+        p.setPen(QPen(QColor(220, 80, 80), 1.0, Qt::DashLine));
+        p.drawLine(QPointF(margin_left, y), QPointF(margin_left + plot_w, y));
+        p.setPen(QColor(220, 80, 80));
+        p.drawText(QRectF(margin_left + plot_w - 80, y - 14, 76, 12),
+                   Qt::AlignRight | Qt::AlignVCenter,
+                   QString("target ") + fmt_z(target_z_));
     }
-    p.drawPath(path);
+
+    // Curves.
+    for (const auto& c : curves_) {
+        if (c.freqs.size() < 2 || c.freqs.size() != c.mags.size()) continue;
+        p.setPen(QPen(c.color, 1.5));
+        QPainterPath path;
+        bool started = false;
+        for (std::size_t i = 0; i < c.freqs.size(); ++i) {
+            const double freq = c.freqs[i], z = c.mags[i];
+            if (freq <= 0.0 || z <= 0.0) continue;
+            const QPointF pt(map_x(freq), map_y(z));
+            if (!started) { path.moveTo(pt); started = true; }
+            else            path.lineTo(pt);
+        }
+        p.drawPath(path);
+    }
+
+    // Legend in top-right if any curve carries a label.
+    int legend_y = margin_top + 4;
+    for (const auto& c : curves_) {
+        if (c.label.isEmpty()) continue;
+        const int x = margin_left + plot_w - 130;
+        p.setPen(QPen(c.color, 2.0));
+        p.drawLine(x, legend_y + 6, x + 22, legend_y + 6);
+        p.setPen(QColor(225, 225, 225));
+        p.drawText(QRect(x + 26, legend_y, 110, 14), Qt::AlignLeft | Qt::AlignVCenter, c.label);
+        legend_y += 14;
+    }
 }

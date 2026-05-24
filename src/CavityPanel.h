@@ -46,6 +46,8 @@ private:
     QDoubleSpinBox* f_max_spin_;
     QSpinBox* points_spin_;
     QSpinBox* modes_spin_;
+    QDoubleSpinBox* target_z_spin_;
+    class QCheckBox* overlay_bare_check_;
     QPushButton* run_btn_;
     QPushButton* clear_btn_;
     QPushButton* save_btn_;
