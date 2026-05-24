@@ -127,10 +127,15 @@ void MainWindow::onAnalyzeStaticIrDrop() {
     // Net, layer, source/sink, current, and cell size all come from the
     // AnalysisPanel — see currentConfig() / currentTotalCurrent().
     auto mc = analysis_panel_->currentConfig();
-    const double total_current = analysis_panel_->currentTotalCurrent();
     if (mc.net_id < 0) {
         QMessageBox::warning(this, "Static IR drop",
                              "No net with copper zones available.");
+        return;
+    }
+    if (mc.pad_currents.empty()) {
+        QMessageBox::warning(this, "Static IR drop",
+                             "Set at least one non-zero pad current. "
+                             "Click Auto-balance for a default.");
         return;
     }
     auto mesh = pdnkit::pi::IrMesher::build(*board_, mc);
@@ -147,7 +152,7 @@ void MainWindow::onAnalyzeStaticIrDrop() {
         return;
     }
 
-    auto sol = pdnkit::pi::IrSolver::solve(mesh, {total_current});
+    auto sol = pdnkit::pi::IrSolver::solve(mesh, {});
     if (!sol.ok) {
         QMessageBox::critical(this, "Static IR drop",
                               QString("Solver failed: %1")
@@ -169,12 +174,16 @@ void MainWindow::onAnalyzeStaticIrDrop() {
     const QString layer_name = layer
         ? QString::fromStdString(layer->name)
         : QString("layer %1").arg(mc.layer_ordinal);
+    double total_injected = 0.0;
+    for (const auto& [_, cur] : mc.pad_currents) {
+        if (cur > 0.0) total_injected += cur;
+    }
     statusBar()->showMessage(
-        QString("IR drop on %1 (%2, %3A): %4 nodes, %5 resistors, "
+        QString("IR drop on %1 (%2, %3 A injected): %4 nodes, %5 resistors, "
                 "Vmax = %6 mV, Vmin = %7 mV  (drop %8 mV)")
             .arg(net_name)
             .arg(layer_name)
-            .arg(total_current, 0, 'f', 3)
+            .arg(total_injected, 0, 'f', 3)
             .arg(mesh.nodes.size())
             .arg(mesh.resistors.size())
             .arg(sol.max_v * 1000.0, 0, 'f', 4)

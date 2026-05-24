@@ -8,25 +8,22 @@
 class QComboBox;
 class QDoubleSpinBox;
 class QPushButton;
+class QTableWidget;
 
-// Dockable panel that drives an IR-drop analysis run. Lets the user pick the
-// target net + layer, override the source/sink pad selection by pad name, and
-// adjust the injected current and grid cell size. The Run button + the
-// MainWindow's Analyze menu action both pull config from this panel.
+// Drives an IR-drop analysis run. User picks the target net + layer + mesh
+// cell size, then sets per-pad current (mA) in a table — positive injects,
+// negative draws. The default-current spinbox seeds new pad rows whenever
+// net/layer changes (first pad = +default, last = −default, rest = 0).
 class AnalysisPanel : public QWidget {
     Q_OBJECT
 public:
     explicit AnalysisPanel(QWidget* parent = nullptr);
 
-    // Repopulate dropdowns from the loaded board. Pass nullptr to clear.
     void setBoard(const pdnkit::model::Board* board);
 
-    // Construct a MeshConfig from current panel state. net_id may be -1 if
-    // the board has no copper nets — the caller should check.
+    // Construct a MeshConfig (including per-pad current map) from current
+    // panel state. cfg.net_id == -1 means "no net selected".
     pdnkit::pi::MeshConfig currentConfig() const;
-
-    // Total current (Amperes) to inject across all source nodes.
-    double currentTotalCurrent() const;
 
 signals:
     void runRequested();
@@ -34,18 +31,19 @@ signals:
 
 private slots:
     void onNetOrLayerChanged();
+    void onAutoBalance();
 
 private:
-    void refreshPadCombos();
+    void rebuildPadTable();
 
     const pdnkit::model::Board* board_ = nullptr;
 
     QComboBox* net_combo_;
     QComboBox* layer_combo_;
-    QComboBox* source_combo_;
-    QComboBox* sink_combo_;
-    QDoubleSpinBox* current_spin_;
+    QDoubleSpinBox* default_current_spin_;
     QDoubleSpinBox* cell_size_spin_;
+    QTableWidget* pad_table_;
+    QPushButton* auto_btn_;
     QPushButton* run_btn_;
     QPushButton* clear_btn_;
 };
