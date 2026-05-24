@@ -205,3 +205,12 @@ void TransientPanel::onSaveCsv() {
             << QString::number(last_vmax_[i], 'g', 8) << '\n';
     }
 }
+
+void TransientPanel::setNetById(int net_id) {
+    for (int i = 0; i < net_combo_->count(); ++i) {
+        if (net_combo_->itemData(i).toInt() == net_id) {
+            net_combo_->setCurrentIndex(i);
+            break;
+        }
+    }
+}

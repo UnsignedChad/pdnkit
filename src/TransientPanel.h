@@ -22,6 +22,7 @@ class TransientPanel : public QWidget {
 public:
     explicit TransientPanel(QWidget* parent = nullptr);
     void setBoard(const pdnkit::model::Board* board);
+    void setNetById(int net_id);
 
 private slots:
     void onRun();

@@ -71,6 +71,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     nets_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     addDockWidget(Qt::RightDockWidgetArea, nets_dock);
     tabifyDockWidget(an_dock, nets_dock);
+    // Click a row in Net Stats -> propagate the selection to all analysis
+    // panels so the user can jump straight from "this net has the most
+    // copper" to running an analysis on it.
+    connect(netstats_panel_, &NetStatsPanel::netSelected,
+            analysis_panel_, &AnalysisPanel::setNetById);
 
     cavity_panel_ = new CavityPanel(this);
     auto* cav_dock = new QDockWidget("Plane Z(f)", this);
@@ -82,6 +87,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             canvas_, &PcbCanvas::setDecapMarkers);
     connect(cavity_panel_, &CavityPanel::cavityChanged,
             canvas_, &PcbCanvas::setCavityHighlight);
+    connect(netstats_panel_, &NetStatsPanel::netSelected,
+            cavity_panel_, &CavityPanel::setNetById);
     connect(cavity_panel_, &CavityPanel::modeShapeMesh, this,
             [this](pdnkit::render::IrResultMesh m) {
                 legend_->setRange(m.v_min, m.v_max);
@@ -89,6 +96,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             });
 
     transient_panel_ = new TransientPanel(this);
+    connect(netstats_panel_, &NetStatsPanel::netSelected,
+            this, [this](int net_id) {
+                if (transient_panel_) transient_panel_->setNetById(net_id);
+            });
     auto* trn_dock = new QDockWidget("Transient", this);
     trn_dock->setWidget(transient_panel_);
     trn_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);

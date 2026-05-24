@@ -603,3 +603,12 @@ void CavityPanel::onShowModeShape() {
 
     emit modeShapeMesh(std::move(mesh));
 }
+
+void CavityPanel::setNetById(int net_id) {
+    for (int i = 0; i < net_combo_->count(); ++i) {
+        if (net_combo_->itemData(i).toInt() == net_id) {
+            net_combo_->setCurrentIndex(i);
+            break;
+        }
+    }
+}

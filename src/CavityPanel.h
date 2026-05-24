@@ -24,6 +24,7 @@ public:
     explicit CavityPanel(QWidget* parent = nullptr);
 
     void setBoard(const pdnkit::model::Board* board);
+    void setNetById(int net_id);
 
 signals:
     // Fires whenever the decap list changes (add / remove / cell edit).

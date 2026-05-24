@@ -20,6 +20,7 @@ public:
     explicit AnalysisPanel(QWidget* parent = nullptr);
 
     void setBoard(const pdnkit::model::Board* board);
+    void setNetById(int net_id);
 
     // Construct a MeshConfig (including per-pad current map) from current
     // panel state. cfg.net_id == -1 means "no net selected".

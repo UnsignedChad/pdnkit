@@ -67,6 +67,19 @@ NetStatsPanel::NetStatsPanel(QWidget* parent) : QWidget(parent) {
     table_->horizontalHeader()->setStretchLastSection(false);
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     outer->addWidget(table_, 1);
+
+    // Click a row -> emit the net's id. The ID lives in column 1 as a
+    // NumberItem; read its text and parse to int. -1 on parse failure
+    // (filtered before emission).
+    QObject::connect(table_, &QTableWidget::itemSelectionChanged, this, [this]() {
+        auto rows = table_->selectionModel()->selectedRows();
+        if (rows.isEmpty()) return;
+        auto* item = table_->item(rows.first().row(), 1);
+        if (!item) return;
+        bool ok = false;
+        const int id = item->text().toInt(&ok);
+        if (ok) emit netSelected(id);
+    });
 }
 
 void NetStatsPanel::setBoard(const pdnkit::model::Board* board) {

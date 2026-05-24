@@ -293,3 +293,12 @@ pdnkit::pi::MeshConfig AnalysisPanel::currentConfig() const {
     }
     return cfg;
 }
+
+void AnalysisPanel::setNetById(int net_id) {
+    for (int i = 0; i < net_combo_->count(); ++i) {
+        if (net_combo_->itemData(i).toInt() == net_id) {
+            net_combo_->setCurrentIndex(i);
+            break;
+        }
+    }
+}

@@ -17,6 +17,9 @@ public:
 
     void setBoard(const pdnkit::model::Board* board);
 
+signals:
+    void netSelected(int net_id);
+
 private:
     void rebuild();
 
