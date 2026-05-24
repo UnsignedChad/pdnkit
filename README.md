@@ -109,6 +109,19 @@ All print CSV to stdout. Same exit codes (2=parse fail, 3=no net, 4=no layer, 5=
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the module layering, data flow, and conventions.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the build, testing conventions, code style, and commit-message guide. Open-hardware EE engineers welcome -- the parser, mesher, and solver all want more real-board exercise.
+
+## Examples
+
+Runnable shell + Python scripts in [examples/](examples/) exercise each CLI mode on the test fixture:
+
+  * `run_static_drop.sh`  -- `--analyze` static IR drop
+  * `run_zf_sweep.sh`     -- `--zf` cavity-model Z(f) sweep
+  * `run_transient.sh`    -- `--transient` step response
+  * `sweep_all_demos.py`  -- run `--analyze` across a tree of `.kicad_pcb` files
+
 ## License
 
-GPL-3.0 — see [LICENSE](LICENSE).
+GPL-3.0 -- see [LICENSE](LICENSE).
