@@ -2,7 +2,7 @@
 
 #include <QWidget>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 
 class QTableWidget;
 
@@ -15,7 +15,7 @@ class NetStatsPanel : public QWidget {
 public:
     explicit NetStatsPanel(QWidget* parent = nullptr);
 
-    void setBoard(const pdnkit::model::Board* board);
+    void setBoard(const kicad_ee::model::Board* board);
 
 signals:
     void netSelected(int net_id);
@@ -23,6 +23,6 @@ signals:
 private:
     void rebuild();
 
-    const pdnkit::model::Board* board_ = nullptr;
+    const kicad_ee::model::Board* board_ = nullptr;
     QTableWidget* table_;
 };

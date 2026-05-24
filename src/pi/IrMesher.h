@@ -19,7 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 
 namespace pdnkit::pi {
 
@@ -105,7 +105,7 @@ class IrMesher {
 public:
     // Build the grid mesh. Returns an empty mesh if the (net, layer) pair has
     // no zone fill.
-    static IrMesh build(const model::Board& board, const MeshConfig& cfg);
+    static IrMesh build(const kicad_ee::model::Board& board, const MeshConfig& cfg);
 };
 
 }  // namespace pdnkit::pi

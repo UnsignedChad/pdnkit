@@ -5,7 +5,7 @@
 #include <QStringList>
 #include <memory>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 #include "pi/IrMesher.h"
 #include "pi/IrSolver.h"
 
@@ -56,7 +56,7 @@ private:
     TransientPanel* transient_panel_;
     ColorLegend* legend_;
     QLabel* hover_label_;
-    std::unique_ptr<pdnkit::model::Board> board_;
+    std::unique_ptr<kicad_ee::model::Board> board_;
     pdnkit::pi::IrMesh last_mesh_;
     pdnkit::pi::Solution last_solution_;
     // Cached MeshConfig parameters needed to rebuild a current-density

@@ -1,11 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "model/Board.h"
-#include "model/HitTest.h"
+#include "kicad_ee/model/Board.h"
+#include "kicad_ee/model/HitTest.h"
 
-using pdnkit::hittest::Hit;
-using pdnkit::hittest::at_point;
-using namespace pdnkit::model;
+using kicad_ee::hittest::Hit;
+using kicad_ee::hittest::at_point;
+using namespace kicad_ee::model;
 
 namespace {
 Board with_copper(int ord = 0) {
@@ -119,11 +119,11 @@ TEST_CASE("hittest: pad takes priority over zone", "[hittest]") {
 }
 
 TEST_CASE("hittest: name() handles all kinds", "[hittest]") {
-    REQUIRE(std::string(pdnkit::hittest::name(Hit::Kind::Pad)) == "pad");
-    REQUIRE(std::string(pdnkit::hittest::name(Hit::Kind::Via)) == "via");
-    REQUIRE(std::string(pdnkit::hittest::name(Hit::Kind::Segment)) == "segment");
-    REQUIRE(std::string(pdnkit::hittest::name(Hit::Kind::Zone)) == "zone");
-    REQUIRE(std::string(pdnkit::hittest::name(Hit::Kind::None)) == "");
+    REQUIRE(std::string(kicad_ee::hittest::name(Hit::Kind::Pad)) == "pad");
+    REQUIRE(std::string(kicad_ee::hittest::name(Hit::Kind::Via)) == "via");
+    REQUIRE(std::string(kicad_ee::hittest::name(Hit::Kind::Segment)) == "segment");
+    REQUIRE(std::string(kicad_ee::hittest::name(Hit::Kind::Zone)) == "zone");
+    REQUIRE(std::string(kicad_ee::hittest::name(Hit::Kind::None)) == "");
 }
 
 TEST_CASE("hittest: rect pad respects width/height + rotation", "[hittest]") {
@@ -132,7 +132,7 @@ TEST_CASE("hittest: rect pad respects width/height + rotation", "[hittest]") {
     Pad p;
     p.at = {0.0, 0.0};
     p.size = {0.004, 0.001};  // 4mm wide, 1mm tall
-    p.shape = pdnkit::model::PadShape::Rect;
+    p.shape = kicad_ee::model::PadShape::Rect;
     p.rotation = 0.0;
     p.layer_ordinals = {0};
     p.net_id = 9;
@@ -154,7 +154,7 @@ TEST_CASE("hittest: rect pad rotated 90deg swaps W/H sensitivity", "[hittest]") 
     Pad p;
     p.at = {0.0, 0.0};
     p.size = {0.004, 0.001};
-    p.shape = pdnkit::model::PadShape::Rect;
+    p.shape = kicad_ee::model::PadShape::Rect;
     p.rotation = 1.5707963267948966;  // 90deg
     p.layer_ordinals = {0};
     b.pads.push_back(p);

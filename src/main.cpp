@@ -19,7 +19,7 @@
 #include <Eigen/Core>
 
 #include "MainWindow.h"
-#include "parser/KicadPcbParser.h"
+#include "kicad_ee/parser/KicadPcbParser.h"
 #include "pi/IrMesher.h"
 #include "pi/CavityModel.h"
 #include "pi/IrSolver.h"
@@ -34,9 +34,9 @@ int run_headless_analysis(const std::string& pcb_path,
                           const std::string& layer_name,
                           double current,
                           double cell_size_mm) {
-    pdnkit::model::Board board;
+    kicad_ee::model::Board board;
     try {
-        board = pdnkit::parser::KicadPcbParser::parse_file(pcb_path);
+        board = kicad_ee::parser::KicadPcbParser::parse_file(pcb_path);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "pdnkit: parse failed: %s\n", e.what());
         return 2;
@@ -120,9 +120,9 @@ int run_headless_zf(const std::string& pcb_path,
                     double eps_r, double tan_delta, double thickness_mm,
                     double f_min, double f_max,
                     int points, int modes) {
-    pdnkit::model::Board board;
+    kicad_ee::model::Board board;
     try {
-        board = pdnkit::parser::KicadPcbParser::parse_file(pcb_path);
+        board = kicad_ee::parser::KicadPcbParser::parse_file(pcb_path);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "pdnkit: parse failed: %s\n", e.what());
         return 2;
@@ -194,9 +194,9 @@ int run_headless_zf(const std::string& pcb_path,
 }
 
 int run_headless_list_nets(const std::string& pcb_path) {
-    pdnkit::model::Board board;
+    kicad_ee::model::Board board;
     try {
-        board = pdnkit::parser::KicadPcbParser::parse_file(pcb_path);
+        board = kicad_ee::parser::KicadPcbParser::parse_file(pcb_path);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "pdnkit: parse failed: %s\n", e.what());
         return 2;
@@ -220,9 +220,9 @@ int run_headless_list_nets(const std::string& pcb_path) {
 }
 
 int run_headless_list_layers(const std::string& pcb_path) {
-    pdnkit::model::Board board;
+    kicad_ee::model::Board board;
     try {
-        board = pdnkit::parser::KicadPcbParser::parse_file(pcb_path);
+        board = kicad_ee::parser::KicadPcbParser::parse_file(pcb_path);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "pdnkit: parse failed: %s\n", e.what());
         return 2;
@@ -242,9 +242,9 @@ int run_headless_probe_r(const std::string& pcb_path,
                          const std::string& pad_a,
                          const std::string& pad_b,
                          double cell_size_mm) {
-    pdnkit::model::Board board;
+    kicad_ee::model::Board board;
     try {
-        board = pdnkit::parser::KicadPcbParser::parse_file(pcb_path);
+        board = kicad_ee::parser::KicadPcbParser::parse_file(pcb_path);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "pdnkit: parse failed: %s\n", e.what());
         return 2;
@@ -324,9 +324,9 @@ int run_headless_transient(const std::string& pcb_path,
                            int n_steps,
                            double eps_r,
                            double thickness_mm) {
-    pdnkit::model::Board board;
+    kicad_ee::model::Board board;
     try {
-        board = pdnkit::parser::KicadPcbParser::parse_file(pcb_path);
+        board = kicad_ee::parser::KicadPcbParser::parse_file(pcb_path);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "pdnkit: parse failed: %s\n", e.what());
         return 2;

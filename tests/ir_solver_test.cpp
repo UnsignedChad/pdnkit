@@ -9,7 +9,7 @@ using pdnkit::pi::IrMesh;
 using pdnkit::pi::IrSolver;
 using pdnkit::pi::MeshConfig;
 using pdnkit::pi::SolveConfig;
-using namespace pdnkit::model;
+using namespace kicad_ee::model;
 using Catch::Approx;
 
 namespace {

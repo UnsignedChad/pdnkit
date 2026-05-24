@@ -10,14 +10,14 @@
 
 #pragma once
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 #include "render/ZoneMesher.h"  // for LayerMesh
 
 namespace pdnkit::render {
 
 class ViaMesher {
 public:
-    static std::vector<LayerMesh> build(const model::Board& board);
+    static std::vector<LayerMesh> build(const kicad_ee::model::Board& board);
 };
 
 class PadMesher {
@@ -25,7 +25,7 @@ public:
     // Pads have no size in the v0 model; render with this default radius (m).
     static constexpr double kDefaultPadRadius = 0.50e-3;  // 0.5 mm
 
-    static std::vector<LayerMesh> build(const model::Board& board);
+    static std::vector<LayerMesh> build(const kicad_ee::model::Board& board);
 };
 
 }  // namespace pdnkit::render

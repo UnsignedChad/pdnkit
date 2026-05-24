@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 
 namespace pdnkit::render {
 
@@ -28,7 +28,7 @@ class ZoneMesher {
 public:
     // Build one LayerMesh per copper layer that has at least one filled
     // polygon. Layers with no zone fill are omitted.
-    static std::vector<LayerMesh> build(const model::Board& board);
+    static std::vector<LayerMesh> build(const kicad_ee::model::Board& board);
 };
 
 }  // namespace pdnkit::render

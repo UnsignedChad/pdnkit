@@ -1,11 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 #include "render/ZoneMesher.h"
 
 using pdnkit::render::ZoneMesher;
 using pdnkit::render::LayerMesh;
-using namespace pdnkit::model;
+using namespace kicad_ee::model;
 
 namespace {
 

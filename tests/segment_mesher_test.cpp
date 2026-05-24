@@ -1,12 +1,12 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 #include "render/SegmentMesher.h"
 
 using pdnkit::render::SegmentMesher;
 using pdnkit::render::build_all_meshes;
-using namespace pdnkit::model;
+using namespace kicad_ee::model;
 using Catch::Approx;
 
 namespace {

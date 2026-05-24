@@ -97,7 +97,7 @@ TransientPanel::TransientPanel(QWidget* parent) : QWidget(parent) {
     connect(clear_btn_, &QPushButton::clicked, this, &TransientPanel::onClear);
 }
 
-void TransientPanel::setBoard(const pdnkit::model::Board* board) {
+void TransientPanel::setBoard(const kicad_ee::model::Board* board) {
     board_ = board;
     rebuildNetCombo();
     layer_combo_->clear();

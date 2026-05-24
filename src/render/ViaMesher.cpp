@@ -25,7 +25,7 @@ LayerMesh& mesh_for(std::vector<LayerMesh>& meshes,
 
 }  // namespace
 
-std::vector<LayerMesh> ViaMesher::build(const model::Board& board) {
+std::vector<LayerMesh> ViaMesher::build(const kicad_ee::model::Board& board) {
     std::unordered_map<int, std::size_t> idx;
     std::vector<LayerMesh> meshes;
 
@@ -69,17 +69,17 @@ void append_rect(LayerMesh& mesh, double cx, double cy, double hw, double hh,
 
 }  // namespace
 
-std::vector<LayerMesh> PadMesher::build(const model::Board& board) {
+std::vector<LayerMesh> PadMesher::build(const kicad_ee::model::Board& board) {
     std::unordered_map<int, std::size_t> idx;
     std::vector<LayerMesh> meshes;
 
     for (const auto& p : board.pads) {
         for (int ord : p.layer_ordinals) {
-            const model::Layer* L = board.find_layer(ord);
+            const kicad_ee::model::Layer* L = board.find_layer(ord);
             if (!L || !L->is_copper()) continue;
             LayerMesh& m = mesh_for(meshes, idx, ord);
             switch (p.shape) {
-                case model::PadShape::Circle: {
+                case kicad_ee::model::PadShape::Circle: {
                     // size.x is the diameter for SMD round pads. Fallback to
                     // kDefaultPadRadius when size is unknown.
                     const double r = (p.size.x > 0.0)
@@ -87,10 +87,10 @@ std::vector<LayerMesh> PadMesher::build(const model::Board& board) {
                     append_disk(m, p.at.x, p.at.y, r);
                     break;
                 }
-                case model::PadShape::Rect:
-                case model::PadShape::RoundRect:
-                case model::PadShape::Oval:    // approximated as Rect for v0
-                case model::PadShape::Custom: {
+                case kicad_ee::model::PadShape::Rect:
+                case kicad_ee::model::PadShape::RoundRect:
+                case kicad_ee::model::PadShape::Oval:    // approximated as Rect for v0
+                case kicad_ee::model::PadShape::Custom: {
                     if (p.size.x > 0.0 && p.size.y > 0.0) {
                         append_rect(m, p.at.x, p.at.y, 0.5 * p.size.x,
                                     0.5 * p.size.y, p.rotation);

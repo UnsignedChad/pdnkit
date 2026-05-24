@@ -29,10 +29,10 @@
 
 namespace {
 
-std::vector<pdnkit::model::Point2> read_decap_positions(QTableWidget* t,
+std::vector<kicad_ee::model::Point2> read_decap_positions(QTableWidget* t,
                                                         double offset_x_m,
                                                         double offset_y_m) {
-    std::vector<pdnkit::model::Point2> out;
+    std::vector<kicad_ee::model::Point2> out;
     for (int r = 0; r < t->rowCount(); ++r) {
         auto* xi = t->item(r, 0);
         auto* yi = t->item(r, 1);
@@ -50,7 +50,7 @@ struct Bbox {
     double lo_x = 0.0, lo_y = 0.0, hi_x = 0.0, hi_y = 0.0;
 };
 
-Bbox zone_bbox(const pdnkit::model::Board& b, int net_id, int layer) {
+Bbox zone_bbox(const kicad_ee::model::Board& b, int net_id, int layer) {
     Bbox box;
     for (const auto& z : b.zones) {
         if (z.net_id != net_id || z.layer_ordinal != layer) continue;
@@ -251,7 +251,7 @@ void CavityPanel::onRemoveDecap() {
 namespace {
 
 // Shoelace polygon area; needed for fill-ratio diagnostic.
-double polygon_ring_area(const std::vector<pdnkit::model::Point2>& ring) {
+double polygon_ring_area(const std::vector<kicad_ee::model::Point2>& ring) {
     if (ring.size() < 3) return 0.0;
     double a = 0.0;
     for (std::size_t i = 0; i < ring.size(); ++i) {
@@ -262,7 +262,7 @@ double polygon_ring_area(const std::vector<pdnkit::model::Point2>& ring) {
 }
 
 // Total filled-zone area for (net, layer) in m^2 (outline minus holes).
-double zone_filled_area(const pdnkit::model::Board& b, int net, int layer) {
+double zone_filled_area(const kicad_ee::model::Board& b, int net, int layer) {
     double total = 0.0;
     for (const auto& z : b.zones) {
         if (z.net_id != net || z.layer_ordinal != layer) continue;
@@ -275,7 +275,7 @@ double zone_filled_area(const pdnkit::model::Board& b, int net, int layer) {
     return total;
 }
 
-std::vector<pdnkit::model::Point2> port_positions(double p1x_mm, double p1y_mm,
+std::vector<kicad_ee::model::Point2> port_positions(double p1x_mm, double p1y_mm,
                                                    double p2x_mm, double p2y_mm,
                                                    double offset_x_m, double offset_y_m) {
     return {
@@ -306,7 +306,7 @@ void CavityPanel::emitCavity() {
     emit cavityChanged(bb.lo_x, bb.lo_y, bb.hi_x, bb.hi_y, ports);
 }
 
-void CavityPanel::setBoard(const pdnkit::model::Board* board) {
+void CavityPanel::setBoard(const kicad_ee::model::Board* board) {
     board_ = board;
     rebuildNetCombo();
     plot_->clear();

@@ -10,7 +10,7 @@
 #include <QOpenGLWidget>
 #include <QPoint>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 #include "render/Camera2D.h"
 #include "render/IrResultMesh.h"
 #include "pi/IrSolver.h"
@@ -21,7 +21,7 @@ class PcbCanvas : public QOpenGLWidget, protected QOpenGLFunctions_3_3_Core {
 public:
     explicit PcbCanvas(QWidget* parent = nullptr);
 
-    void setBoard(const pdnkit::model::Board* board);
+    void setBoard(const kicad_ee::model::Board* board);
     void setLayerVisibility(int ordinal, bool visible);
     void fitToBoard();
 
@@ -44,13 +44,13 @@ public:
     // Decoupling-cap position markers (world coords in meters), rendered
     // as blue dots over everything. CavityPanel pushes this list whenever
     // the user adds/removes/edits a decap.
-    void setDecapMarkers(const std::vector<pdnkit::model::Point2>& positions);
+    void setDecapMarkers(const std::vector<kicad_ee::model::Point2>& positions);
 
     // Cavity highlight: dashed bbox around the meshed plane, plus port
     // markers (cyan dots). Pass an empty Point2 list to clear ports;
     // pass hi <= lo on bbox to clear the rectangle.
     void setCavityHighlight(double lo_x, double lo_y, double hi_x, double hi_y,
-                            const std::vector<pdnkit::model::Point2>& ports);
+                            const std::vector<kicad_ee::model::Point2>& ports);
 
 signals:
     void hoverInfo(const QString& info);
@@ -88,7 +88,7 @@ private:
     };
 
     pdnkit::render::Camera2D camera_;
-    const pdnkit::model::Board* board_ = nullptr;
+    const kicad_ee::model::Board* board_ = nullptr;
 
     QOpenGLShaderProgram flat_prog_;  // grid + board layer fills
     QOpenGLShaderProgram heat_prog_;  // IR-drop overlay (viridis)
@@ -136,13 +136,13 @@ private:
     QOpenGLBuffer decap_ibo_{QOpenGLBuffer::IndexBuffer};
     QOpenGLVertexArrayObject decap_vao_;
     int decap_index_count_ = 0;
-    std::vector<pdnkit::model::Point2> pending_decaps_;
+    std::vector<kicad_ee::model::Point2> pending_decaps_;
     bool decaps_dirty_ = false;
 
     // Cavity overlay: bbox outline (dashed) + port markers (cyan).
     double cavity_lo_x_ = 0.0, cavity_lo_y_ = 0.0;
     double cavity_hi_x_ = 0.0, cavity_hi_y_ = 0.0;
-    std::vector<pdnkit::model::Point2> cavity_ports_;
+    std::vector<kicad_ee::model::Point2> cavity_ports_;
     QOpenGLBuffer cavity_rect_vbo_{QOpenGLBuffer::VertexBuffer};
     QOpenGLVertexArrayObject cavity_rect_vao_;
     QOpenGLBuffer cavity_port_vbo_{QOpenGLBuffer::VertexBuffer};

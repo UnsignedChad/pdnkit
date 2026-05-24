@@ -4,7 +4,7 @@
 
 #include <vector>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 #include "render/IrResultMesh.h"
 
 class QComboBox;
@@ -23,17 +23,17 @@ class CavityPanel : public QWidget {
 public:
     explicit CavityPanel(QWidget* parent = nullptr);
 
-    void setBoard(const pdnkit::model::Board* board);
+    void setBoard(const kicad_ee::model::Board* board);
     void setNetById(int net_id);
 
 signals:
     // Fires whenever the decap list changes (add / remove / cell edit).
-    void decapsChanged(const std::vector<pdnkit::model::Point2>& positions);
+    void decapsChanged(const std::vector<kicad_ee::model::Point2>& positions);
 
     // Fires whenever the cavity bbox or port positions change (net swap,
     // layer swap, or port spinbox edit).
     void cavityChanged(double lo_x, double lo_y, double hi_x, double hi_y,
-                       const std::vector<pdnkit::model::Point2>& ports);
+                       const std::vector<kicad_ee::model::Point2>& ports);
 
 private slots:
     void onRun();
@@ -52,7 +52,7 @@ private:
     void updatePlaneInfo();
     void rebuildNetCombo();
 
-    const pdnkit::model::Board* board_ = nullptr;
+    const kicad_ee::model::Board* board_ = nullptr;
 
     QComboBox* net_combo_;
     QDoubleSpinBox* eps_r_spin_;

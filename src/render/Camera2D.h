@@ -7,19 +7,19 @@
 
 #include <array>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 
 namespace pdnkit::render {
 
 class Camera2D {
 public:
-    model::Point2 center{0.0, 0.0};   // world point at the screen center
+    kicad_ee::model::Point2 center{0.0, 0.0};   // world point at the screen center
     double pixels_per_meter = 1000.0; // zoom; default 1 px = 1 mm
 
-    model::Point2 screen_to_world(double sx, double sy,
+    kicad_ee::model::Point2 screen_to_world(double sx, double sy,
                                    int widget_w, int widget_h) const;
 
-    void world_to_screen(model::Point2 wp,
+    void world_to_screen(kicad_ee::model::Point2 wp,
                          int widget_w, int widget_h,
                          double& sx, double& sy) const;
 
@@ -34,7 +34,7 @@ public:
 
     // Fit world bounding box [lo, hi] into the widget with a fractional
     // margin on each side. No-op if the box is degenerate.
-    void fit_to_bounds(model::Point2 lo, model::Point2 hi,
+    void fit_to_bounds(kicad_ee::model::Point2 lo, kicad_ee::model::Point2 hi,
                        int widget_w, int widget_h, double margin = 0.05);
 
     // Column-major 4x4 ortho projection (world → NDC), suitable for

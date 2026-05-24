@@ -7,7 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "parser/KicadPcbParser.h"
+#include "kicad_ee/parser/KicadPcbParser.h"
 #include "pi/IrMesher.h"
 #include "pi/IrSolver.h"
 
@@ -15,7 +15,7 @@
 #error "PDNKIT_TEST_FIXTURES_DIR must be defined by CMake."
 #endif
 
-using pdnkit::parser::KicadPcbParser;
+using kicad_ee::parser::KicadPcbParser;
 using pdnkit::pi::IrMesher;
 using pdnkit::pi::IrSolver;
 using pdnkit::pi::MeshConfig;

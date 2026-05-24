@@ -8,7 +8,7 @@
 
 namespace pdnkit::render {
 
-std::vector<LayerMesh> SegmentMesher::build(const model::Board& board) {
+std::vector<LayerMesh> SegmentMesher::build(const kicad_ee::model::Board& board) {
     std::unordered_map<int, std::size_t> layer_to_mesh;
     std::vector<LayerMesh> meshes;
 
@@ -23,7 +23,7 @@ std::vector<LayerMesh> SegmentMesher::build(const model::Board& board) {
     };
 
     for (const auto& s : board.segments) {
-        const model::Layer* L = board.find_layer(s.layer_ordinal);
+        const kicad_ee::model::Layer* L = board.find_layer(s.layer_ordinal);
         if (!L || !L->is_copper()) continue;
         if (s.width <= 0.0) continue;
 
@@ -84,7 +84,7 @@ void merge_into(std::vector<LayerMesh>& dst,
 
 }  // namespace
 
-std::vector<LayerMesh> build_all_meshes(const model::Board& board) {
+std::vector<LayerMesh> build_all_meshes(const kicad_ee::model::Board& board) {
     std::vector<LayerMesh> result = ZoneMesher::build(board);
     merge_into(result, SegmentMesher::build(board));
     merge_into(result, ViaMesher::build(board));

@@ -15,7 +15,7 @@ namespace {
 
 // Ray-casting point-in-polygon (duplicated from HitTest to avoid pulling the
 // hittest module — they are independent concerns and this is 10 lines).
-bool point_in_ring(const std::vector<model::Point2>& ring, double px, double py) {
+bool point_in_ring(const std::vector<kicad_ee::model::Point2>& ring, double px, double py) {
     bool inside = false;
     const std::size_t n = ring.size();
     if (n < 3) return false;
@@ -30,7 +30,7 @@ bool point_in_ring(const std::vector<model::Point2>& ring, double px, double py)
     return inside;
 }
 
-bool point_in_polygon(const model::Polygon& poly, double px, double py) {
+bool point_in_polygon(const kicad_ee::model::Polygon& poly, double px, double py) {
     if (!point_in_ring(poly.outline, px, py)) return false;
     for (const auto& h : poly.holes) {
         if (point_in_ring(h, px, py)) return false;
@@ -39,7 +39,7 @@ bool point_in_polygon(const model::Polygon& poly, double px, double py) {
 }
 
 // Returns true if (px, py) lies in any filled polygon of any matching zone.
-bool point_in_target_copper(const model::Board& board, int net, int layer,
+bool point_in_target_copper(const kicad_ee::model::Board& board, int net, int layer,
                             double px, double py) {
     for (const auto& z : board.zones) {
         if (z.net_id != net) continue;
@@ -52,7 +52,7 @@ bool point_in_target_copper(const model::Board& board, int net, int layer,
 }
 
 // Shoelace area of a closed polygon ring (always positive).
-double polygon_ring_area(const std::vector<model::Point2>& ring) {
+double polygon_ring_area(const std::vector<kicad_ee::model::Point2>& ring) {
     if (ring.size() < 3) return 0.0;
     double a = 0.0;
     for (std::size_t i = 0; i < ring.size(); ++i) {
@@ -64,7 +64,7 @@ double polygon_ring_area(const std::vector<model::Point2>& ring) {
 
 // Total filled-zone area for (net, layer) in m^2. Approximates "is there
 // copper to mesh here?" -- holes subtract from the polygon.
-double zone_area_on(const model::Board& board, int net, int layer) {
+double zone_area_on(const kicad_ee::model::Board& board, int net, int layer) {
     double total = 0.0;
     for (const auto& z : board.zones) {
         if (z.net_id != net || z.layer_ordinal != layer) continue;
@@ -79,7 +79,7 @@ double zone_area_on(const model::Board& board, int net, int layer) {
 
 // World bbox of all filled polygons on the target (net, layer). Returns false
 // if there is no matching geometry.
-bool target_bbox(const model::Board& board, int net, int layer,
+bool target_bbox(const kicad_ee::model::Board& board, int net, int layer,
                  double& lo_x, double& lo_y, double& hi_x, double& hi_y) {
     bool have_any = false;
     for (const auto& z : board.zones) {
@@ -118,7 +118,7 @@ struct LayerSubmesh {
     double cell_size = 0.0;
 };
 
-LayerSubmesh mesh_one_layer(const model::Board& board, const MeshConfig& cfg,
+LayerSubmesh mesh_one_layer(const kicad_ee::model::Board& board, const MeshConfig& cfg,
                              int layer_ord, IrMesh& mesh, double g_per_square) {
     LayerSubmesh sm;
     sm.layer_ordinal = layer_ord;
@@ -176,10 +176,10 @@ LayerSubmesh mesh_one_layer(const model::Board& board, const MeshConfig& cfg,
 // rather than a single point -- on a 2D sheet, point-load spreading
 // resistance diverges as the contact shrinks, so a pad bigger than the
 // mesh cell deserves a multi-node attachment.
-std::vector<int> nodes_under_pad(const IrMesh& mesh, const model::Pad& pad,
+std::vector<int> nodes_under_pad(const IrMesh& mesh, const kicad_ee::model::Pad& pad,
                                   int layer) {
     std::vector<int> out;
-    const bool radial = (pad.shape == model::PadShape::Circle) ||
+    const bool radial = (pad.shape == kicad_ee::model::PadShape::Circle) ||
                         (pad.size.x <= 0.0 || pad.size.y <= 0.0);
     if (radial) {
         const double r = (pad.size.x > 0.0) ? 0.5 * pad.size.x : 0.0;
@@ -213,20 +213,20 @@ std::vector<int> nodes_under_pad(const IrMesh& mesh, const model::Pad& pad,
 // that route power via tracks instead of pours). Each segment becomes a
 // single resistor R = rho * L / (W * t); endpoints are de-duped within
 // 1 um. Pads on the net attach to the nearest track node within ~1 mm.
-IrMesh build_track_mesh(const model::Board& board, const MeshConfig& cfg,
+IrMesh build_track_mesh(const kicad_ee::model::Board& board, const MeshConfig& cfg,
                          int layer_ord) {
     IrMesh mesh;
     // Endpoint dedup. Snap to a 1-micrometer grid to merge KiCad-format
     // 6-decimal coordinate noise.
     constexpr double kSnap = 1.0e-6;
     std::map<std::pair<long long, long long>, int> point_to_id;
-    auto key_of = [&](const model::Point2& p) {
+    auto key_of = [&](const kicad_ee::model::Point2& p) {
         return std::pair<long long, long long>{
             static_cast<long long>(std::lround(p.x / kSnap)),
             static_cast<long long>(std::lround(p.y / kSnap))
         };
     };
-    auto get_or_create = [&](const model::Point2& p) {
+    auto get_or_create = [&](const kicad_ee::model::Point2& p) {
         auto k = key_of(p);
         auto it = point_to_id.find(k);
         if (it != point_to_id.end()) return it->second;
@@ -249,7 +249,7 @@ IrMesh build_track_mesh(const model::Board& board, const MeshConfig& cfg,
         if (length <= 0.0) continue;
         // Per-layer thickness if the stackup supplied one; else cfg fallback.
         double thickness = cfg.copper_thickness;
-        if (const model::Layer* L = board.find_layer(layer_ord)) {
+        if (const kicad_ee::model::Layer* L = board.find_layer(layer_ord)) {
             if (L->thickness > 0.0) thickness = L->thickness;
         }
         const double R = cfg.copper_rho * length / (seg.width * thickness);
@@ -286,8 +286,8 @@ IrMesh build_track_mesh(const model::Board& board, const MeshConfig& cfg,
         return std::pair<int, double>{best, best_d2};
     };
 
-    const model::Pad* src = nullptr;
-    const model::Pad* snk = nullptr;
+    const kicad_ee::model::Pad* src = nullptr;
+    const kicad_ee::model::Pad* snk = nullptr;
     for (const auto& pad : board.pads) {
         if (pad.net_id != cfg.net_id) continue;
         bool on_layer = false;
@@ -444,7 +444,7 @@ int nearest_node_on_layer(const IrMesh& mesh, double px, double py, int layer) {
 
 }  // namespace
 
-IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
+IrMesh IrMesher::build(const kicad_ee::model::Board& board, const MeshConfig& cfg) {
     IrMesh mesh;
     if (cfg.cell_size <= 0.0 || cfg.copper_thickness <= 0.0 ||
         cfg.copper_rho <= 0.0) {
@@ -564,7 +564,7 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
         return best;
     };
 
-    auto pad_on_target = [&](const model::Pad& p) {
+    auto pad_on_target = [&](const kicad_ee::model::Pad& p) {
         if (p.net_id != cfg.net_id) return false;
         for (int o : p.layer_ordinals) {
             if (o == cfg.layer_ordinal) return true;
@@ -583,7 +583,7 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
     // every mesh node inside the pad footprint receives an equal share of
     // the pad's current. Falls back to nearest_node when the pad is smaller
     // than the cell or covers no cells at all.
-    auto pad_nodes = [&](const model::Pad& pad) -> std::vector<int> {
+    auto pad_nodes = [&](const kicad_ee::model::Pad& pad) -> std::vector<int> {
         auto nodes = nodes_under_pad(mesh, pad, primary_layer);
         if (!nodes.empty()) return nodes;
         const int nid = nearest_node(pad.at.x, pad.at.y);
@@ -636,8 +636,8 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
     // Auto-fill anything still missing with leftmost / rightmost pad
     // (edge-contact node lists).
     if (mesh.source_node_ids.empty() || mesh.sink_node_ids.empty()) {
-        const model::Pad* src = nullptr;
-        const model::Pad* snk = nullptr;
+        const kicad_ee::model::Pad* src = nullptr;
+        const kicad_ee::model::Pad* snk = nullptr;
         for (const auto& pad : board.pads) {
             if (!pad_on_target(pad)) continue;
             if (!src || pad.at.x < src->at.x) src = &pad;

@@ -4,7 +4,7 @@
 
 namespace pdnkit::render {
 
-using model::Point2;
+using kicad_ee::model::Point2;
 
 Point2 Camera2D::screen_to_world(double sx, double sy, int w, int h) const {
     return {center.x + (sx - 0.5 * w) / pixels_per_meter,

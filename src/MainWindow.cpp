@@ -29,7 +29,7 @@
 #include "NetStatsPanel.h"
 #include "LayerPanel.h"
 #include "PcbCanvas.h"
-#include "parser/KicadPcbParser.h"
+#include "kicad_ee/parser/KicadPcbParser.h"
 #include "pi/IrMesher.h"
 #include "pi/IrSolver.h"
 #include "render/IrResultMesh.h"
@@ -370,8 +370,8 @@ void MainWindow::populateLayerPanel() {
 
 bool MainWindow::loadKicadPcb(const QString& path) {
     try {
-        auto board = std::make_unique<pdnkit::model::Board>(
-            pdnkit::parser::KicadPcbParser::parse_file(path.toStdString()));
+        auto board = std::make_unique<kicad_ee::model::Board>(
+            kicad_ee::parser::KicadPcbParser::parse_file(path.toStdString()));
 
         const auto net_count   = board->nets.size();
         const auto seg_count   = board->segments.size();

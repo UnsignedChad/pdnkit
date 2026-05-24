@@ -3,9 +3,7 @@ include(Catch)
 
 add_executable(pdnkit_tests
     smoke_test.cpp
-    sexpr_test.cpp
     model_test.cpp
-    parser_test.cpp
     camera_test.cpp
     zone_mesher_test.cpp
     segment_mesher_test.cpp

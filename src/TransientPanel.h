@@ -4,7 +4,7 @@
 
 #include <vector>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 
 class QComboBox;
 class QDoubleSpinBox;
@@ -21,7 +21,7 @@ class TransientPanel : public QWidget {
     Q_OBJECT
 public:
     explicit TransientPanel(QWidget* parent = nullptr);
-    void setBoard(const pdnkit::model::Board* board);
+    void setBoard(const kicad_ee::model::Board* board);
     void setNetById(int net_id);
 
 private slots:
@@ -32,7 +32,7 @@ private slots:
 private:
     void rebuildNetCombo();
 
-    const pdnkit::model::Board* board_ = nullptr;
+    const kicad_ee::model::Board* board_ = nullptr;
 
     QComboBox* net_combo_;
     QComboBox* layer_combo_;

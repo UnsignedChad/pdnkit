@@ -136,7 +136,7 @@ AnalysisPanel::ViewMode AnalysisPanel::viewMode() const {
                                                 : ViewMode::Voltage;
 }
 
-void AnalysisPanel::setBoard(const pdnkit::model::Board* board) {
+void AnalysisPanel::setBoard(const kicad_ee::model::Board* board) {
     board_ = board;
 
     QSignalBlocker bn(net_combo_);

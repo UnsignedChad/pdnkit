@@ -11,7 +11,7 @@
 #include <QSettings>
 #include <QWheelEvent>
 
-#include "model/HitTest.h"
+#include "kicad_ee/model/HitTest.h"
 #include "render/CircleHelper.h"
 #include "render/LayerColors.h"
 
@@ -87,7 +87,7 @@ PcbCanvas::PcbCanvas(QWidget* parent) : QOpenGLWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
 }
 
-void PcbCanvas::setBoard(const pdnkit::model::Board* board) {
+void PcbCanvas::setBoard(const kicad_ee::model::Board* board) {
     board_ = board;
     pending_meshes_.clear();
     layer_visible_.clear();
@@ -150,7 +150,7 @@ void PcbCanvas::setProbeSource(pdnkit::pi::IrMesh mesh,
     update();
 }
 
-void PcbCanvas::setDecapMarkers(const std::vector<pdnkit::model::Point2>& positions) {
+void PcbCanvas::setDecapMarkers(const std::vector<kicad_ee::model::Point2>& positions) {
     pending_decaps_ = positions;
     decaps_dirty_ = true;
     update();
@@ -158,7 +158,7 @@ void PcbCanvas::setDecapMarkers(const std::vector<pdnkit::model::Point2>& positi
 
 void PcbCanvas::setCavityHighlight(double lo_x, double lo_y,
                                     double hi_x, double hi_y,
-                                    const std::vector<pdnkit::model::Point2>& ports) {
+                                    const std::vector<kicad_ee::model::Point2>& ports) {
     cavity_lo_x_ = lo_x;
     cavity_lo_y_ = lo_y;
     cavity_hi_x_ = hi_x;
@@ -759,8 +759,8 @@ void PcbCanvas::mousePressEvent(QMouseEvent* e) {
         const auto world = camera_.screen_to_world(
             e->pos().x(), e->pos().y(), width(), height());
         const double tol = 6.0 / camera_.pixels_per_meter;
-        const auto hit = pdnkit::hittest::at_point(*board_, world, tol);
-        if (hit.kind != pdnkit::hittest::Hit::Kind::Pad ||
+        const auto hit = kicad_ee::hittest::at_point(*board_, world, tol);
+        if (hit.kind != kicad_ee::hittest::Hit::Kind::Pad ||
             hit.element_index < 0) {
             if (probe_pad_a_ >= 0) {
                 probe_pad_a_ = -1;
@@ -816,10 +816,10 @@ void PcbCanvas::mouseMoveEvent(QMouseEvent* e) {
         const auto world = camera_.screen_to_world(
             e->pos().x(), e->pos().y(), width(), height());
         const double tol = 4.0 / camera_.pixels_per_meter;
-        const auto hit = pdnkit::hittest::at_point(*board_, world, tol);
+        const auto hit = kicad_ee::hittest::at_point(*board_, world, tol);
 
         QString info;
-        if (hit.kind != pdnkit::hittest::Hit::Kind::None) {
+        if (hit.kind != kicad_ee::hittest::Hit::Kind::None) {
             const auto* net = board_->find_net(hit.net_id);
             const auto* layer = board_->find_layer(hit.layer_ordinal);
             const QString net_name = (net && !net->name.empty())
@@ -829,7 +829,7 @@ void PcbCanvas::mouseMoveEvent(QMouseEvent* e) {
                 ? QString::fromStdString(layer->name)
                 : QString("?");
             info = QString("%1   net %2 (%3)   layer %4")
-                       .arg(pdnkit::hittest::name(hit.kind))
+                       .arg(kicad_ee::hittest::name(hit.kind))
                        .arg(net_name)
                        .arg(hit.net_id)
                        .arg(layer_name);

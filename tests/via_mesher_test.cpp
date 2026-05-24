@@ -1,11 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 #include "render/ViaMesher.h"
 
 using pdnkit::render::ViaMesher;
 using pdnkit::render::PadMesher;
-using namespace pdnkit::model;
+using namespace kicad_ee::model;
 
 TEST_CASE("via: 2-layer through-via produces a disk on each copper layer", "[via]") {
     Board b;

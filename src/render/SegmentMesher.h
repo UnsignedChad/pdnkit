@@ -6,18 +6,18 @@
 
 #pragma once
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 #include "render/ZoneMesher.h"  // for LayerMesh
 
 namespace pdnkit::render {
 
 class SegmentMesher {
 public:
-    static std::vector<LayerMesh> build(const model::Board& board);
+    static std::vector<LayerMesh> build(const kicad_ee::model::Board& board);
 };
 
 // Convenience: build zone fills + segment quads in one pass, merging results
 // per copper layer. This is what the renderer consumes.
-std::vector<LayerMesh> build_all_meshes(const model::Board& board);
+std::vector<LayerMesh> build_all_meshes(const kicad_ee::model::Board& board);
 
 }  // namespace pdnkit::render

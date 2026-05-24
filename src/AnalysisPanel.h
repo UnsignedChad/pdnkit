@@ -2,7 +2,7 @@
 
 #include <QWidget>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 #include "pi/IrMesher.h"
 
 class QComboBox;
@@ -19,7 +19,7 @@ class AnalysisPanel : public QWidget {
 public:
     explicit AnalysisPanel(QWidget* parent = nullptr);
 
-    void setBoard(const pdnkit::model::Board* board);
+    void setBoard(const kicad_ee::model::Board* board);
     void setNetById(int net_id);
 
     // Construct a MeshConfig (including per-pad current map) from current
@@ -50,7 +50,7 @@ private:
     void updateSumLabel();
     void rebuildExtraLayers();
 
-    const pdnkit::model::Board* board_ = nullptr;
+    const kicad_ee::model::Board* board_ = nullptr;
 
     QComboBox* net_combo_;
     QComboBox* layer_combo_;

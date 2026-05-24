@@ -4,17 +4,17 @@
 
 #include <mapbox/earcut.hpp>
 
-// Teach earcut how to read x/y from model::Point2.
+// Teach earcut how to read x/y from kicad_ee::model::Point2.
 namespace mapbox {
 namespace util {
 
 template <>
-struct nth<0, pdnkit::model::Point2> {
-    static auto get(const pdnkit::model::Point2& p) { return p.x; }
+struct nth<0, kicad_ee::model::Point2> {
+    static auto get(const kicad_ee::model::Point2& p) { return p.x; }
 };
 template <>
-struct nth<1, pdnkit::model::Point2> {
-    static auto get(const pdnkit::model::Point2& p) { return p.y; }
+struct nth<1, kicad_ee::model::Point2> {
+    static auto get(const kicad_ee::model::Point2& p) { return p.y; }
 };
 
 }  // namespace util
@@ -22,7 +22,7 @@ struct nth<1, pdnkit::model::Point2> {
 
 namespace pdnkit::render {
 
-std::vector<LayerMesh> ZoneMesher::build(const model::Board& board) {
+std::vector<LayerMesh> ZoneMesher::build(const kicad_ee::model::Board& board) {
     // Layer ordinal → index into result vector. Lets us append per zone.
     std::unordered_map<int, std::size_t> layer_to_mesh;
     std::vector<LayerMesh> meshes;
@@ -38,14 +38,14 @@ std::vector<LayerMesh> ZoneMesher::build(const model::Board& board) {
     };
 
     for (const auto& z : board.zones) {
-        const model::Layer* L = board.find_layer(z.layer_ordinal);
+        const kicad_ee::model::Layer* L = board.find_layer(z.layer_ordinal);
         if (!L || !L->is_copper()) continue;
 
         for (const auto& fp : z.filled) {
             if (fp.outline.size() < 3) continue;  // not a polygon
 
             // Build earcut input: outline ring + hole rings.
-            std::vector<std::vector<model::Point2>> rings;
+            std::vector<std::vector<kicad_ee::model::Point2>> rings;
             rings.reserve(1 + fp.holes.size());
             rings.push_back(fp.outline);
             for (const auto& h : fp.holes) {

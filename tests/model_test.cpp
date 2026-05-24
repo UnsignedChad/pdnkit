@@ -1,8 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 
-using namespace pdnkit::model;
+using namespace kicad_ee::model;
 
 TEST_CASE("model: empty board defaults", "[model]") {
     Board b;

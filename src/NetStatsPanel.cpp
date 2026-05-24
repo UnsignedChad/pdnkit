@@ -12,7 +12,7 @@
 namespace {
 
 // Signed area (shoelace). Returns absolute value.
-double polygon_area(const std::vector<pdnkit::model::Point2>& pts) {
+double polygon_area(const std::vector<kicad_ee::model::Point2>& pts) {
     if (pts.size() < 3) return 0.0;
     double a = 0.0;
     for (std::size_t i = 0; i < pts.size(); ++i) {
@@ -23,7 +23,7 @@ double polygon_area(const std::vector<pdnkit::model::Point2>& pts) {
 }
 
 // Polygon area minus hole areas.
-double polygon_with_holes_area(const pdnkit::model::Polygon& p) {
+double polygon_with_holes_area(const kicad_ee::model::Polygon& p) {
     double a = polygon_area(p.outline);
     for (const auto& h : p.holes) a -= polygon_area(h);
     return std::max(0.0, a);
@@ -82,7 +82,7 @@ NetStatsPanel::NetStatsPanel(QWidget* parent) : QWidget(parent) {
     });
 }
 
-void NetStatsPanel::setBoard(const pdnkit::model::Board* board) {
+void NetStatsPanel::setBoard(const kicad_ee::model::Board* board) {
     board_ = board;
     rebuild();
 }

@@ -2,13 +2,13 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include "model/Board.h"
+#include "kicad_ee/model/Board.h"
 #include "pi/IrMesher.h"
 
 using pdnkit::pi::IrMesher;
 using pdnkit::pi::IrMesh;
 using pdnkit::pi::MeshConfig;
-using namespace pdnkit::model;
+using namespace kicad_ee::model;
 using Catch::Approx;
 
 namespace {

@@ -4,7 +4,7 @@
 #include "render/Camera2D.h"
 
 using pdnkit::render::Camera2D;
-using pdnkit::model::Point2;
+using kicad_ee::model::Point2;
 using Catch::Approx;
 
 namespace {

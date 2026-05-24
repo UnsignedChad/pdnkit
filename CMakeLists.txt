@@ -39,10 +39,12 @@ endif()
 
 # Core static library: parsing, model, mesher, solver.
 # Linked by both the GUI binary and the test binary.
+# kicad-ee-core: shared parser, model, sexpr, hit-test. Lives in its
+# own repo (github.com/UnsignedChad/kicad-ee-core) so sikit can share
+# the same code. See INTEGRATION.md in that repo for the design.
+add_subdirectory(third_party/kicad-ee-core)
+
 add_library(pdnkit_core STATIC
-    src/sexpr/SExpr.cpp
-    src/parser/KicadPcbParser.cpp
-    src/model/HitTest.cpp
     src/pi/IrMesher.cpp
     src/pi/IrSolver.cpp
     src/pi/CavityModel.cpp
@@ -59,6 +61,7 @@ target_include_directories(pdnkit_core PUBLIC third_party)
 target_link_libraries(pdnkit_core PUBLIC
     Eigen3::Eigen
     spdlog::spdlog
+    kicad_ee::core
 )
 if(PDNKIT_HAVE_CHOLMOD)
     target_compile_definitions(pdnkit_core PUBLIC PDNKIT_HAVE_CHOLMOD)
