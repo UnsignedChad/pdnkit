@@ -40,3 +40,9 @@ target_link_libraries(pdnkit PRIVATE
 target_compile_options(pdnkit PRIVATE
     -Wall -Wextra -Wpedantic
 )
+
+option(PDNKIT_BUILD_TESTS "Build pdnkit unit tests" ON)
+if(PDNKIT_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
