@@ -5,7 +5,10 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QFile>
+#include <QFileDialog>
 #include <QHBoxLayout>
+#include <QTextStream>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
@@ -79,8 +82,10 @@ TransientPanel::TransientPanel(QWidget* parent) : QWidget(parent) {
 
     auto* btn_row = new QHBoxLayout();
     run_btn_   = new QPushButton("Run transient");
+    save_btn_  = new QPushButton("Save CSV...");
     clear_btn_ = new QPushButton("Clear");
     btn_row->addWidget(run_btn_);
+    btn_row->addWidget(save_btn_);
     btn_row->addWidget(clear_btn_);
     outer->addLayout(btn_row);
 
@@ -88,6 +93,7 @@ TransientPanel::TransientPanel(QWidget* parent) : QWidget(parent) {
     outer->addWidget(plot_, 1);
 
     connect(run_btn_,   &QPushButton::clicked, this, &TransientPanel::onRun);
+    connect(save_btn_,  &QPushButton::clicked, this, &TransientPanel::onSaveCsv);
     connect(clear_btn_, &QPushButton::clicked, this, &TransientPanel::onClear);
 }
 
@@ -121,6 +127,9 @@ void TransientPanel::rebuildNetCombo() {
 }
 
 void TransientPanel::onClear() {
+    last_t_.clear();
+    last_vobs_.clear();
+    last_vmax_.clear();
     plot_->clear();
 }
 
@@ -165,7 +174,34 @@ void TransientPanel::onRun() {
             QString("Solver failed: %1").arg(QString::fromStdString(res.error)));
         return;
     }
+    last_t_    = res.times;
+    last_vobs_ = res.obs_v;
+    last_vmax_ = res.max_v;
     plot_->setData(std::move(res.times),
                    std::move(res.obs_v),
                    std::move(res.max_v));
+}
+
+void TransientPanel::onSaveCsv() {
+    if (last_t_.empty()) {
+        QMessageBox::information(this, "Transient export",
+            "No transient result to export. Run first.");
+        return;
+    }
+    QString path = QFileDialog::getSaveFileName(this, "Export transient as CSV",
+                                                  QString(), "CSV (*.csv)");
+    if (path.isEmpty()) return;
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "Export failed",
+                             QString("Could not open %1 for writing").arg(path));
+        return;
+    }
+    QTextStream out(&f);
+    out << "time_s,v_obs_v,v_max_v\n";
+    for (std::size_t i = 0; i < last_t_.size(); ++i) {
+        out << QString::number(last_t_[i],    'g', 8) << ','
+            << QString::number(last_vobs_[i], 'g', 8) << ','
+            << QString::number(last_vmax_[i], 'g', 8) << '\n';
+    }
 }
