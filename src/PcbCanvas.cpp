@@ -557,6 +557,46 @@ void PcbCanvas::paintGL() {
             "Drop a .kicad_pcb file here\nor use File > Open KiCad PCB...");
     }
 
+    // Voltage labels at source/sink markers (when a probe solution is loaded).
+    if (probe_solution_.ok &&
+        !probe_mesh_.nodes.empty() &&
+        probe_solution_.voltages.size() == probe_mesh_.nodes.size() &&
+        (!probe_mesh_.source_node_ids.empty() ||
+         !probe_mesh_.sink_node_ids.empty())) {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        QFont lf = painter.font();
+        lf.setPointSizeF(lf.pointSizeF() - 1);
+        lf.setBold(true);
+        painter.setFont(lf);
+
+        auto draw_label = [&](int node_id, QColor color) {
+            if (node_id < 0 ||
+                node_id >= static_cast<int>(probe_mesh_.nodes.size())) return;
+            const auto& n = probe_mesh_.nodes[node_id];
+            double sx = 0, sy = 0;
+            camera_.world_to_screen({n.x, n.y}, width(), height(), sx, sy);
+            const double v = probe_solution_.voltages[node_id];
+            const QString text = (std::abs(v) >= 1.0)
+                ? QString::number(v, 'f', 4) + " V"
+                : QString::number(v * 1000.0, 'f', 3) + " mV";
+            const QPoint anchor(static_cast<int>(sx) + 10,
+                                static_cast<int>(sy) - 4);
+            // Dark outline + colored text -- legible over the heat-map.
+            painter.setPen(QColor(0, 0, 0, 200));
+            for (int dx = -1; dx <= 1; ++dx)
+                for (int dy = -1; dy <= 1; ++dy)
+                    if (dx || dy)
+                        painter.drawText(anchor + QPoint(dx, dy), text);
+            painter.setPen(color);
+            painter.drawText(anchor, text);
+        };
+        for (int nid : probe_mesh_.source_node_ids)
+            draw_label(nid, QColor(180, 255, 200));
+        for (int nid : probe_mesh_.sink_node_ids)
+            draw_label(nid, QColor(255, 200, 200));
+    }
+
     // Cavity overlay: lazily upload, then draw rect + port markers.
     if (cavity_dirty_) {
         // Rect as a 5-vertex line strip (uses GL_LINE_STRIP) drawing the
