@@ -23,23 +23,31 @@ find_package(Eigen3 REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(CLI11 REQUIRED)
 
+# Core static library: parsing, model, mesher, solver code.
+# Both the GUI binary and the test binary link against it.
+add_library(pdnkit_core STATIC
+    src/sexpr/SExpr.cpp
+)
+target_include_directories(pdnkit_core PUBLIC src)
+target_link_libraries(pdnkit_core PUBLIC
+    Eigen3::Eigen
+    spdlog::spdlog
+)
+target_compile_options(pdnkit_core PRIVATE -Wall -Wextra -Wpedantic)
+
+# GUI executable.
 add_executable(pdnkit
     src/main.cpp
     src/MainWindow.cpp
     src/PcbCanvas.cpp
 )
-
 target_link_libraries(pdnkit PRIVATE
+    pdnkit_core
     Qt6::Widgets
     Qt6::OpenGLWidgets
-    Eigen3::Eigen
-    spdlog::spdlog
     CLI11::CLI11
 )
-
-target_compile_options(pdnkit PRIVATE
-    -Wall -Wextra -Wpedantic
-)
+target_compile_options(pdnkit PRIVATE -Wall -Wextra -Wpedantic)
 
 option(PDNKIT_BUILD_TESTS "Build pdnkit unit tests" ON)
 if(PDNKIT_BUILD_TESTS)
