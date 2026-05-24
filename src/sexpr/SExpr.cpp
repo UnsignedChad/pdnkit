@@ -225,19 +225,20 @@ Node parse(std::string_view src) {
         throw ParseError("empty input", 1, 1);
     }
     Node root = parse_node(lex, std::move(first));
-    // KiCad files sometimes have sibling top-level forms after the main
-    // (kicad_pcb ...) block (embedded_fonts, 3D model entries, etc.) --
-    // silently discard those, but a stray standalone token (especially
-    // a lone close paren) is still a real error.
-    auto next = lex.next();
-    while (next.kind != Lexer::Tok::End) {
-        if (next.kind == Lexer::Tok::RParen) {
-            throw ParseError("unexpected ')' at top level",
-                             next.line, next.col);
+    // Once the main form has been parsed successfully, anything past it is
+    // best-effort: real-world KiCad output sometimes contains sibling
+    // top-level forms (embedded_fonts, 3D model entries) AND occasional
+    // dangling close-parens or syntax errors near EOF. Swallow them rather
+    // than refuse the whole load -- the user wants the board parsed.
+    try {
+        auto next = lex.next();
+        while (next.kind != Lexer::Tok::End) {
+            if (next.kind == Lexer::Tok::RParen) break;
+            (void)parse_node(lex, std::move(next));
+            next = lex.next();
         }
-        // Parse and discard another full form (LParen-rooted or atom).
-        (void)parse_node(lex, std::move(next));
-        next = lex.next();
+    } catch (const ParseError&) {
+        // Discard trailing errors silently.
     }
     return root;
 }

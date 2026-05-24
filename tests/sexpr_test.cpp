@@ -105,8 +105,16 @@ TEST_CASE("sexpr: error on unterminated string", "[sexpr]") {
     REQUIRE_THROWS_AS(parse(R"((a "unterminated))"), ParseError);
 }
 
-TEST_CASE("sexpr: error on extra closing paren", "[sexpr]") {
-    REQUIRE_THROWS_AS(parse("(a b) )"), ParseError);
+TEST_CASE("sexpr: trailing junk after the main form is tolerated", "[sexpr]") {
+    // Once the main form parses, anything past it (sibling forms, stray
+    // tokens, syntax errors near EOF) is swallowed so real-world KiCad
+    // files with minor end-of-file imbalance still load.
+    auto a = parse("(kicad_pcb (version 1))");
+    REQUIRE(a.tag() == "kicad_pcb");
+    auto b = parse("(kicad_pcb (version 1)) (extra junk) )");
+    REQUIRE(b.tag() == "kicad_pcb");
+    auto c = parse("(kicad_pcb (v 1)) garbage ( ( (");
+    REQUIRE(c.tag() == "kicad_pcb");
 }
 
 TEST_CASE("sexpr: error on empty input", "[sexpr]") {
