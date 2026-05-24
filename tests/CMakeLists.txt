@@ -16,6 +16,7 @@ add_executable(pdnkit_tests
     ir_result_mesh_test.cpp
     cavity_model_test.cpp
     decap_optimizer_test.cpp
+    transient_test.cpp
     e2e_test.cpp
     ohms_law_test.cpp
 )
