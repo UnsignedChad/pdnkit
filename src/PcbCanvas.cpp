@@ -9,6 +9,7 @@
 #include <QVector4D>
 #include <QWheelEvent>
 
+#include "model/HitTest.h"
 #include "render/LayerColors.h"
 
 namespace {
@@ -247,6 +248,32 @@ void PcbCanvas::mouseMoveEvent(QMouseEvent* e) {
         camera_.pan_pixels(d.x(), d.y());
         last_mouse_ = e->pos();
         update();
+    }
+
+    if (board_) {
+        const auto world = camera_.screen_to_world(
+            e->pos().x(), e->pos().y(), width(), height());
+        // Hover pick tolerance: ~4 screen pixels, expressed in world units.
+        const double tol = 4.0 / camera_.pixels_per_meter;
+        const auto hit = pdnkit::hittest::at_point(*board_, world, tol);
+
+        QString info;
+        if (hit.kind != pdnkit::hittest::Hit::Kind::None) {
+            const auto* net = board_->find_net(hit.net_id);
+            const auto* layer = board_->find_layer(hit.layer_ordinal);
+            const QString net_name = (net && !net->name.empty())
+                ? QString::fromStdString(net->name)
+                : QString("(unnamed)");
+            const QString layer_name = layer
+                ? QString::fromStdString(layer->name)
+                : QString("?");
+            info = QString("%1   net %2 (%3)   layer %4")
+                       .arg(pdnkit::hittest::name(hit.kind))
+                       .arg(net_name)
+                       .arg(hit.net_id)
+                       .arg(layer_name);
+        }
+        emit hoverInfo(info);
     }
 }
 

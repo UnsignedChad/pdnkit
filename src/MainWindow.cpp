@@ -5,6 +5,7 @@
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QLabel>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QStatusBar>
@@ -42,6 +43,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     fitAct->setShortcut(QKeySequence(Qt::Key_Home));
     connect(fitAct, &QAction::triggered, canvas_, &PcbCanvas::fitToBoard);
     viewMenu->addAction(dock->toggleViewAction());
+
+    // Permanent label on the right of the status bar for hover info.
+    hover_label_ = new QLabel(this);
+    hover_label_->setMinimumWidth(300);
+    statusBar()->addPermanentWidget(hover_label_);
+    connect(canvas_, &PcbCanvas::hoverInfo, hover_label_, &QLabel::setText);
 
     statusBar()->showMessage("Ready");
 }

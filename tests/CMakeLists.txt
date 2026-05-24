@@ -10,6 +10,7 @@ add_executable(pdnkit_tests
     zone_mesher_test.cpp
     segment_mesher_test.cpp
     via_mesher_test.cpp
+    hit_test.cpp
 )
 
 target_link_libraries(pdnkit_tests PRIVATE

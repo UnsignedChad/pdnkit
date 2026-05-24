@@ -29,6 +29,11 @@ public:
     // Re-run fit-to-bounds on whatever board is currently loaded.
     void fitToBoard();
 
+signals:
+    // Emitted whenever the mouse moves over the canvas. Empty string when
+    // nothing is under the cursor; formatted summary otherwise (net + layer).
+    void hoverInfo(const QString& info);
+
 protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
