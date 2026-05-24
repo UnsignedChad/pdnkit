@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QString>
 #include <memory>
 
 #include "model/Board.h"
@@ -29,6 +30,7 @@ protected:
 
 private slots:
     void onOpenKicadPcb();
+    void onReloadBoard();
     void onAnalyzeStaticIrDrop();
     void onSaveCanvasImage();
     void onExportResultsCsv();
@@ -46,4 +48,5 @@ private:
     std::unique_ptr<pdnkit::model::Board> board_;
     pdnkit::pi::IrMesh last_mesh_;
     pdnkit::pi::Solution last_solution_;
+    QString current_board_path_;
 };

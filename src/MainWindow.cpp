@@ -86,6 +86,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* openAct = fileMenu->addAction("&Open KiCad PCB...");
     openAct->setShortcut(QKeySequence::Open);
     connect(openAct, &QAction::triggered, this, &MainWindow::onOpenKicadPcb);
+    auto* reloadAct = fileMenu->addAction("&Reload");
+    reloadAct->setShortcut(QKeySequence("Ctrl+R"));
+    connect(reloadAct, &QAction::triggered, this, &MainWindow::onReloadBoard);
     fileMenu->addSeparator();
     auto* saveImgAct = fileMenu->addAction("&Save Canvas as Image...");
     saveImgAct->setShortcut(QKeySequence("Ctrl+Shift+S"));
@@ -261,6 +264,7 @@ bool MainWindow::loadKicadPcb(const QString& path) {
         board_ = std::move(board);
         canvas_->setBoard(board_.get());
         populateLayerPanel();
+        current_board_path_ = path;
         analysis_panel_->setBoard(board_.get());
         netstats_panel_->setBoard(board_.get());
         cavity_panel_->setBoard(board_.get());
@@ -334,4 +338,14 @@ void MainWindow::onExportResultsCsv() {
         QString("Exported %1 nodes to %2")
             .arg(last_mesh_.nodes.size())
             .arg(QFileInfo(path).fileName()));
+}
+
+void MainWindow::onReloadBoard() {
+    if (current_board_path_.isEmpty()) {
+        QMessageBox::information(this, "Reload", "No board loaded yet.");
+        return;
+    }
+    if (!loadKicadPcb(current_board_path_)) {
+        // loadKicadPcb already showed an error box; status bar will reflect it.
+    }
 }
