@@ -2,6 +2,8 @@
 
 #include <QWidget>
 
+#include <vector>
+
 #include "model/Board.h"
 
 class QComboBox;
@@ -24,6 +26,7 @@ public:
 private slots:
     void onRun();
     void onClear();
+    void onSaveCsv();
 
 private:
     void rebuildNetCombo();
@@ -42,5 +45,10 @@ private:
     QSpinBox* modes_spin_;
     QPushButton* run_btn_;
     QPushButton* clear_btn_;
+    QPushButton* save_btn_;
     ZfPlotWidget* plot_;
+
+    // Cache of the latest sweep for CSV export.
+    std::vector<double> last_freqs_;
+    std::vector<double> last_mags_;
 };

@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -12,6 +13,7 @@
 #include "MainWindow.h"
 #include "parser/KicadPcbParser.h"
 #include "pi/IrMesher.h"
+#include "pi/CavityModel.h"
 #include "pi/IrSolver.h"
 
 namespace {
@@ -92,6 +94,87 @@ int run_headless_analysis(const std::string& pcb_path,
     return 0;
 }
 
+int run_headless_zf(const std::string& pcb_path,
+                    const std::string& net_name,
+                    const std::string& layer_name,
+                    double port1_x_mm, double port1_y_mm,
+                    double port2_x_mm, double port2_y_mm,
+                    double eps_r, double tan_delta, double thickness_mm,
+                    double f_min, double f_max,
+                    int points, int modes) {
+    pdnkit::model::Board board;
+    try {
+        board = pdnkit::parser::KicadPcbParser::parse_file(pcb_path);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "pdnkit: parse failed: %s\n", e.what());
+        return 2;
+    }
+    const auto* net = board.find_net_by_name(net_name);
+    if (!net) {
+        std::fprintf(stderr, "pdnkit: no net named '%s'\n", net_name.c_str());
+        return 3;
+    }
+    int layer_ord = -1;
+    for (const auto& L : board.stackup.layers) {
+        if (L.name == layer_name) { layer_ord = L.ordinal; break; }
+    }
+    if (layer_ord < 0) {
+        std::fprintf(stderr, "pdnkit: no layer named '%s'\n", layer_name.c_str());
+        return 4;
+    }
+
+    // Plane bbox from zone fill on (net, layer).
+    bool any = false;
+    double lo_x = 0, lo_y = 0, hi_x = 0, hi_y = 0;
+    for (const auto& z : board.zones) {
+        if (z.net_id != net->id || z.layer_ordinal != layer_ord) continue;
+        for (const auto& fp : z.filled) {
+            for (const auto& p : fp.outline) {
+                if (!any) { lo_x = hi_x = p.x; lo_y = hi_y = p.y; any = true; }
+                else {
+                    if (p.x < lo_x) lo_x = p.x;
+                    if (p.x > hi_x) hi_x = p.x;
+                    if (p.y < lo_y) lo_y = p.y;
+                    if (p.y > hi_y) hi_y = p.y;
+                }
+            }
+        }
+    }
+    if (!any) {
+        std::fprintf(stderr, "pdnkit: no filled zones on (net, layer)\n");
+        return 5;
+    }
+
+    pdnkit::pi::CavityConfig cfg;
+    cfg.a = hi_x - lo_x;
+    cfg.b = hi_y - lo_y;
+    cfg.d = thickness_mm * 1.0e-3;
+    cfg.eps_r = eps_r;
+    cfg.tan_delta = tan_delta;
+    cfg.max_modes = modes;
+
+    std::vector<double> freqs;
+    freqs.reserve(points);
+    const double log_lo = std::log10(f_min);
+    const double log_hi = std::log10(f_max);
+    for (int i = 0; i < points; ++i) {
+        const double t = (points == 1) ? 0.0 : static_cast<double>(i) / (points - 1);
+        freqs.push_back(std::pow(10.0, log_lo + t * (log_hi - log_lo)));
+    }
+    auto mags = pdnkit::pi::cavity_impedance_magnitude_sweep(
+        cfg,
+        port1_x_mm * 1.0e-3, port1_y_mm * 1.0e-3,
+        port2_x_mm * 1.0e-3, port2_y_mm * 1.0e-3,
+        freqs);
+
+    // CSV to stdout
+    std::printf("freq_hz,abs_z_ohm\n");
+    for (std::size_t i = 0; i < freqs.size(); ++i) {
+        std::printf("%.8g,%.8g\n", freqs[i], mags[i]);
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -120,6 +203,26 @@ int main(int argc, char** argv) {
     cli.add_option("--cell-size", analyze_cell_mm,
                    "Mesh cell size, millimeters (default: 0.5)");
 
+    bool zf = false;
+    double zf_p1x = 0.0, zf_p1y = 0.0, zf_p2x = 0.0, zf_p2y = 0.0;
+    double zf_eps_r = 4.3, zf_tan_delta = 0.020, zf_thickness_mm = 1.6;
+    double zf_f_min = 1.0e6, zf_f_max = 5.0e9;
+    int zf_points = 300, zf_modes = 30;
+    cli.add_flag("--zf", zf,
+                 "Run cavity-model Z(f) sweep headlessly. Prints CSV to stdout. "
+                 "Uses --net and --layer for the plane.");
+    cli.add_option("--port1-x", zf_p1x, "Z(f) port 1 X position (mm)");
+    cli.add_option("--port1-y", zf_p1y, "Z(f) port 1 Y position (mm)");
+    cli.add_option("--port2-x", zf_p2x, "Z(f) port 2 X position (mm)");
+    cli.add_option("--port2-y", zf_p2y, "Z(f) port 2 Y position (mm)");
+    cli.add_option("--eps-r", zf_eps_r, "Dielectric eps_r (default 4.3 FR-4)");
+    cli.add_option("--tan-delta", zf_tan_delta, "Loss tangent (default 0.020)");
+    cli.add_option("--thickness", zf_thickness_mm, "Substrate thickness (mm)");
+    cli.add_option("--f-min", zf_f_min, "Sweep start frequency (Hz)");
+    cli.add_option("--f-max", zf_f_max, "Sweep end frequency (Hz)");
+    cli.add_option("--points", zf_points, "Number of log-spaced frequency points");
+    cli.add_option("--modes", zf_modes, "Mode sum truncation per axis");
+
     try {
         cli.parse(argc, argv);
     } catch (const CLI::ParseError& e) {
@@ -135,6 +238,18 @@ int main(int argc, char** argv) {
         }
         return run_headless_analysis(pcb_path, analyze_net, analyze_layer,
                                       analyze_current, analyze_cell_mm);
+    }
+    if (zf) {
+        if (pcb_path.empty()) {
+            std::fprintf(stderr,
+                         "pdnkit: --zf requires a board file "
+                         "(--open <file> or positional)\n");
+            return 1;
+        }
+        return run_headless_zf(pcb_path, analyze_net, analyze_layer,
+                               zf_p1x, zf_p1y, zf_p2x, zf_p2y,
+                               zf_eps_r, zf_tan_delta, zf_thickness_mm,
+                               zf_f_min, zf_f_max, zf_points, zf_modes);
     }
 
     QSurfaceFormat fmt;

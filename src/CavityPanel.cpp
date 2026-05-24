@@ -5,6 +5,10 @@
 #include <set>
 #include <vector>
 
+#include <QFile>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QTextStream>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -125,8 +129,10 @@ CavityPanel::CavityPanel(QWidget* parent) : QWidget(parent) {
 
     auto* btn_row = new QHBoxLayout();
     run_btn_   = new QPushButton("Run sweep");
+    save_btn_  = new QPushButton("Save CSV...");
     clear_btn_ = new QPushButton("Clear");
     btn_row->addWidget(run_btn_);
+    btn_row->addWidget(save_btn_);
     btn_row->addWidget(clear_btn_);
     outer->addLayout(btn_row);
 
@@ -134,6 +140,7 @@ CavityPanel::CavityPanel(QWidget* parent) : QWidget(parent) {
     outer->addWidget(plot_, 1);
 
     connect(run_btn_,   &QPushButton::clicked, this, &CavityPanel::onRun);
+    connect(save_btn_,  &QPushButton::clicked, this, &CavityPanel::onSaveCsv);
     connect(clear_btn_, &QPushButton::clicked, this, &CavityPanel::onClear);
 }
 
@@ -195,9 +202,36 @@ void CavityPanel::onRun() {
         freqs.push_back(std::pow(10.0, log_lo + t * (log_hi - log_lo)));
     }
     auto mags = pdnkit::pi::cavity_impedance_magnitude_sweep(cfg, x1, y1, x2, y2, freqs);
+    last_freqs_ = freqs;
+    last_mags_  = mags;
     plot_->setData(std::move(freqs), std::move(mags));
 }
 
+void CavityPanel::onSaveCsv() {
+    if (last_freqs_.empty() || last_freqs_.size() != last_mags_.size()) {
+        QMessageBox::information(this, "Z(f) export",
+            "No sweep result to export. Click Run sweep first.");
+        return;
+    }
+    QString path = QFileDialog::getSaveFileName(this, "Export Z(f) sweep as CSV",
+                                                  QString(), "CSV (*.csv)");
+    if (path.isEmpty()) return;
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "Export failed",
+                             QString("Could not open %1 for writing").arg(path));
+        return;
+    }
+    QTextStream out(&f);
+    out << "freq_hz,abs_z_ohm\n";
+    for (std::size_t i = 0; i < last_freqs_.size(); ++i) {
+        out << QString::number(last_freqs_[i], 'g', 8) << ','
+            << QString::number(last_mags_[i],  'g', 8) << '\n';
+    }
+}
+
 void CavityPanel::onClear() {
+    last_freqs_.clear();
+    last_mags_.clear();
     plot_->clear();
 }
