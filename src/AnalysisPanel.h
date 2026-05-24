@@ -26,10 +26,20 @@ public:
     // panel state. cfg.net_id == -1 means "no net selected".
     pdnkit::pi::MeshConfig currentConfig() const;
 
+    // Heat-map view mode: voltage drop (default) or current-density |J|.
+    // The mesh and solution are the same; only the per-node colorant
+    // changes. Lets the user spot bottlenecks without re-running the solver.
+    enum class ViewMode { Voltage, CurrentDensity };
+    ViewMode viewMode() const;
+
 signals:
     void runRequested();
     void netChanged(int net_id);
     void clearRequested();
+    // Emitted when the user toggles voltage / current-density display.
+    // MainWindow rebuilds the heat-map mesh from the cached IR-drop
+    // solution -- no resolve needed.
+    void viewModeChanged(int mode);  // ViewMode int
 
 private slots:
     void onNetOrLayerChanged();
@@ -52,4 +62,5 @@ private:
     QPushButton* auto_btn_;
     QPushButton* run_btn_;
     QPushButton* clear_btn_;
+    class QCheckBox* current_density_check_;
 };

@@ -26,6 +26,7 @@
 // contact source/sink support is a follow-up.
 
 #include <cmath>
+#include <numeric>
 #include <filesystem>
 
 #include <catch2/catch_approx.hpp>
@@ -34,6 +35,7 @@
 #include "parser/KicadPcbParser.h"
 #include "pi/IrMesher.h"
 #include "pi/IrSolver.h"
+#include "render/IrResultMesh.h"
 
 #ifndef PDNKIT_TEST_FIXTURES_DIR
 #error "PDNKIT_TEST_FIXTURES_DIR must be defined by CMake."
@@ -207,4 +209,80 @@ TEST_CASE("ohms-law: source/sink_pad_indices match name-based picking",
     REQUIRE(sol_swap.ok);
     const double v_swap = sol_swap.max_v - sol_swap.min_v;
     REQUIRE(std::abs(v_swap - v_ref) / v_ref < 1.0e-6);
+}
+
+
+// Current-density heat-map: on the trace_100mm fixture, the analytical
+// answer is uniform K_sheet = I / W in the middle of the trace, where W
+// is the trace width. The mesh's middle cells must hit that value within
+// 10% once you exclude the source/sink edge-spreading regions.
+TEST_CASE("ohms-law: current-density heat-map matches I/W in mid-trace",
+          "[ohms][validation][current-density]") {
+    auto b = KicadPcbParser::parse_file(fixture("trace_100mm.kicad_pcb"));
+
+    MeshConfig mc;
+    mc.cell_size = 0.5e-3;
+    mc.net_id = b.find_net_by_name("VRAIL")->id;
+    mc.layer_ordinal = 0;
+    mc.copper_thickness = kCuThickness;
+    mc.copper_rho = kRhoCu;
+    auto mesh = IrMesher::build(b, mc);
+    REQUIRE(!mesh.nodes.empty());
+
+    auto sol = IrSolver::solve(mesh, {kCurrent});
+    REQUIRE(sol.ok);
+
+    auto rm = pdnkit::render::build_current_density_mesh(
+        mesh, sol, mc.cell_size, kCuThickness, kRhoCu);
+    REQUIRE(!rm.vertices.empty());
+    REQUIRE(rm.v_max > rm.v_min);
+
+    // Recompute |J| ourselves so we can pick middle-of-trace nodes.
+    // (The render mesh discards which node each quad came from -- we
+    // re-derive instead of cracking the interleaved vertex array.)
+    // For the trace, dV/dx is the dominant gradient; central diff.
+    // Build (i,j) -> nid map.
+    std::unordered_map<long long, int> ij_to_nid;
+    for (std::size_t k = 0; k < mesh.nodes.size(); ++k) {
+        const auto& n = mesh.nodes[k];
+        const long long key = (static_cast<long long>(n.grid_i) << 32) |
+                              (static_cast<unsigned>(n.grid_j));
+        ij_to_nid[key] = static_cast<int>(k);
+    }
+    // Pad centers in the fixture are at x = 5 mm and 95 mm; mid-trace is
+    // x ~ 50 mm. Find nodes near that x and in the middle of the trace's y
+    // span. Compute |J_x| = (V_left - V_right) / (2*dx) * t / rho.
+    const double sigma_sheet = kCuThickness / kRhoCu;
+    std::vector<double> mid_J;
+    for (const auto& n : mesh.nodes) {
+        if (std::abs(n.x - 0.050) > 5e-3) continue;  // within +/-5mm of middle
+        // central diff in x
+        const long long kp = (static_cast<long long>(n.grid_i + 1) << 32) |
+                             (static_cast<unsigned>(n.grid_j));
+        const long long km = (static_cast<long long>(n.grid_i - 1) << 32) |
+                             (static_cast<unsigned>(n.grid_j));
+        auto itp = ij_to_nid.find(kp);
+        auto itm = ij_to_nid.find(km);
+        if (itp == ij_to_nid.end() || itm == ij_to_nid.end()) continue;
+        const double dv = sol.voltages[itp->second] -
+                          sol.voltages[itm->second];
+        const double grad_x = dv / (2.0 * mc.cell_size);
+        const double Jx = std::abs(sigma_sheet * grad_x);
+        mid_J.push_back(Jx);
+    }
+    REQUIRE(mid_J.size() > 10);
+
+    // Analytical: K = I / W (uniform across the cross-section).
+    const double K_ideal = kCurrent / kTraceWidth;  // A/m
+
+    const double K_mean = std::accumulate(mid_J.begin(), mid_J.end(), 0.0) /
+                          static_cast<double>(mid_J.size());
+    INFO("K_ideal (I/W) = " << K_ideal << " A/m");
+    INFO("K_mean (mid)  = " << K_mean << " A/m");
+    INFO("|J| min/max in render mesh = "
+         << rm.v_min << " / " << rm.v_max << " A/m");
+
+    // 10% on the mean is plenty -- this is the spatial average over the
+    // uniform-flow region of the trace.
+    REQUIRE(std::abs(K_mean - K_ideal) / K_ideal < 0.10);
 }

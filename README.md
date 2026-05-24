@@ -63,7 +63,7 @@ ctest --test-dir build
 
 1. **File > Open KiCad PCB...** — parses zones, tracks, vias, pads, board outline (Edge.Cuts), stackup. Ctrl+R reloads.
 2. **Layers dock** — toggle visibility per copper layer. Layer thickness column reads from the parsed stackup.
-3. **Analysis dock** — pick net + primary layer, check extra layers for multi-layer through-vias, edit per-pad currents in a table (live sum-balance indicator). Run.
+3. **Analysis dock** — pick net + primary layer, check extra layers for multi-layer through-vias, edit per-pad currents in a table (live sum-balance indicator). Run. After a solve, toggle **Show current density |J|** to recolor the heat-map by sheet current density (A/m) instead of voltage — narrow copper bottlenecks light up red.
 4. **Plane Z(f) dock** — pick net (auto-fits plane bbox), set ports / dielectric / sweep range, add decoupling capacitors in a table or use **Auto-suggest** to pick from the library. Plot has bare-plane overlay and target-impedance line. **Show mode shape at peak** overlays the standing-wave pattern on the canvas.
 5. **Transient dock** — step current, dt, n_steps, eps_r, substrate thickness. Plot V(t) at the observation node + max |V| over the mesh.
 6. **Net Stats dock** — sortable per-net summary: pads, segments, length, copper area.

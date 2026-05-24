@@ -4,6 +4,7 @@
 #include <set>
 #include <vector>
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -97,6 +98,13 @@ AnalysisPanel::AnalysisPanel(QWidget* parent) : QWidget(parent) {
         "one-sink scenarios.");
     outer->addWidget(auto_btn_);
 
+    current_density_check_ = new QCheckBox("Show current density |J|");
+    current_density_check_->setToolTip(
+        "After running the solver, color the heat-map by sheet current "
+        "density (A/m) instead of voltage. Reveals narrow copper sections "
+        "where current crowds. Toggles without re-solving.");
+    outer->addWidget(current_density_check_);
+
     auto* btn_row = new QHBoxLayout();
     run_btn_ = new QPushButton("Run");
     clear_btn_ = new QPushButton("Clear");
@@ -117,6 +125,15 @@ AnalysisPanel::AnalysisPanel(QWidget* parent) : QWidget(parent) {
     connect(auto_btn_,    &QPushButton::clicked, this, &AnalysisPanel::onAutoBalance);
     connect(run_btn_,     &QPushButton::clicked, this, &AnalysisPanel::runRequested);
     connect(clear_btn_,   &QPushButton::clicked, this, &AnalysisPanel::clearRequested);
+    connect(current_density_check_, &QCheckBox::toggled, this, [this](bool on) {
+        emit viewModeChanged(static_cast<int>(on ? ViewMode::CurrentDensity
+                                                  : ViewMode::Voltage));
+    });
+}
+
+AnalysisPanel::ViewMode AnalysisPanel::viewMode() const {
+    return current_density_check_->isChecked() ? ViewMode::CurrentDensity
+                                                : ViewMode::Voltage;
 }
 
 void AnalysisPanel::setBoard(const pdnkit::model::Board* board) {

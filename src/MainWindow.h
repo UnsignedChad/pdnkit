@@ -37,6 +37,7 @@ private slots:
     void onReloadBoard();
     void onAnalyzeStaticIrDrop();
     void onProbeRequested(int pad_a, int pad_b, int net_id, int layer_ord);
+    void onViewModeChanged(int mode);
     void onSaveCanvasImage();
     void onExportResultsCsv();
     void onAboutDialog();
@@ -58,6 +59,11 @@ private:
     std::unique_ptr<pdnkit::model::Board> board_;
     pdnkit::pi::IrMesh last_mesh_;
     pdnkit::pi::Solution last_solution_;
+    // Cached MeshConfig parameters needed to rebuild a current-density
+    // overlay from the same solution without re-running IrMesher.
+    double last_cell_size_ = 5.0e-4;
+    double last_copper_thickness_ = 35.0e-6;
+    double last_copper_rho_ = 1.68e-8;
     QString current_board_path_;
     QStringList recent_files_;
     class QMenu* recent_menu_ = nullptr;

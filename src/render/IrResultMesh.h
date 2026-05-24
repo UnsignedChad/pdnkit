@@ -50,6 +50,19 @@ IrResultMesh build_ir_result_mesh(const pi::IrMesh& mesh,
                                    const pi::Solution& solution,
                                    double cell_size);
 
+// Build a current-density |J| heat-map from an IR-drop solution. Per node,
+// |J|_sheet = t * |grad V| / rho_cu  (units A/m, sheet current density --
+// the natural quantity for PCB current crowding). Central-difference in
+// (i,j) grid space where neighbors exist; one-sided at the boundaries.
+// The returned IrResultMesh's v_min/v_max hold the |J| range (A/m) so
+// callers can label the legend appropriately. cell_size, copper_thickness,
+// and rho_cu must be in SI units (meters, ohm*m).
+IrResultMesh build_current_density_mesh(const pi::IrMesh& mesh,
+                                         const pi::Solution& solution,
+                                         double cell_size,
+                                         double copper_thickness,
+                                         double rho_cu);
+
 // Build a colored grid mesh from a flat magnitudes array (row-major,
 // nx*ny). origin_x/y is the world position of the lower-left corner; the
 // grid covers (origin_x, origin_y) to (origin_x + nx*dx, origin_y + ny*dy).

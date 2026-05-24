@@ -89,6 +89,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             });
     connect(analysis_panel_, &AnalysisPanel::clearRequested,
             canvas_, [this]() { canvas_->setIrResult({}); legend_->setRange(0, 0); });
+    connect(analysis_panel_, &AnalysisPanel::viewModeChanged,
+            this, &MainWindow::onViewModeChanged);
 
     // Net statistics dock, tabbed with Analysis on the right.
     netstats_panel_ = new NetStatsPanel(this);
@@ -281,6 +283,18 @@ void MainWindow::onAnalyzeStaticIrDrop() {
     canvas_->setProbeSource(mesh, sol);
     last_mesh_ = std::move(mesh);
     last_solution_ = std::move(sol);
+    last_cell_size_       = mc.cell_size;
+    last_copper_thickness_ = mc.copper_thickness;
+    last_copper_rho_       = mc.copper_rho;
+    // Honor the panel's current view mode for the just-finished solve.
+    if (analysis_panel_->viewMode() ==
+        AnalysisPanel::ViewMode::CurrentDensity) {
+        auto cd = pdnkit::render::build_current_density_mesh(
+            last_mesh_, last_solution_, last_cell_size_,
+            last_copper_thickness_, last_copper_rho_);
+        legend_->setRange(cd.v_min, cd.v_max);
+        canvas_->setIrResult(std::move(cd));
+    }
 
     const auto* net = board_->find_net(mc.net_id);
     const QString net_name = (net && !net->name.empty())
@@ -627,4 +641,30 @@ void MainWindow::onProbeRequested(int pad_a, int pad_b,
             .arg(net_name)
             .arg(r * 1000.0, 0, 'f', 4),
         12000);
+}
+
+
+void MainWindow::onViewModeChanged(int mode) {
+    if (!last_solution_.ok || last_mesh_.nodes.empty() ||
+        last_solution_.voltages.size() != last_mesh_.nodes.size()) {
+        // No solution to recolor yet -- toggle takes effect on next Run.
+        return;
+    }
+    if (mode == static_cast<int>(AnalysisPanel::ViewMode::CurrentDensity)) {
+        auto cd = pdnkit::render::build_current_density_mesh(
+            last_mesh_, last_solution_, last_cell_size_,
+            last_copper_thickness_, last_copper_rho_);
+        legend_->setRange(cd.v_min, cd.v_max);
+        canvas_->setIrResult(std::move(cd));
+        statusBar()->showMessage(
+            QString("Current-density view:  |J| range %1 - %2 A/m")
+                .arg(cd.v_min, 0, 'f', 1).arg(cd.v_max, 0, 'f', 1),
+            10000);
+    } else {
+        auto rm = pdnkit::render::build_ir_result_mesh(
+            last_mesh_, last_solution_, last_cell_size_);
+        legend_->setRange(last_solution_.min_v, last_solution_.max_v);
+        canvas_->setIrResult(std::move(rm));
+        statusBar()->showMessage("Voltage-drop view restored.", 6000);
+    }
 }
