@@ -12,6 +12,7 @@ class LayerPanel;
 class AnalysisPanel;
 class ColorLegend;
 class NetStatsPanel;
+class CavityPanel;
 class QLabel;
 
 class MainWindow : public QMainWindow {
@@ -39,6 +40,7 @@ private:
     LayerPanel* layer_panel_;
     AnalysisPanel* analysis_panel_;
     NetStatsPanel* netstats_panel_;
+    CavityPanel* cavity_panel_;
     ColorLegend* legend_;
     QLabel* hover_label_;
     std::unique_ptr<pdnkit::model::Board> board_;

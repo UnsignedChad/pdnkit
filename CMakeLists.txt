@@ -73,6 +73,8 @@ add_executable(pdnkit
     src/LayerPanel.cpp
     src/AnalysisPanel.cpp
     src/NetStatsPanel.cpp
+    src/CavityPanel.cpp
+    src/ZfPlotWidget.cpp
     src/ColorLegend.cpp
 )
 target_link_libraries(pdnkit PRIVATE
