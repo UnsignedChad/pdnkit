@@ -11,6 +11,7 @@
 #include <QStatusBar>
 #include <spdlog/spdlog.h>
 
+#include "AnalysisPanel.h"
 #include "LayerPanel.h"
 #include "PcbCanvas.h"
 #include "parser/KicadPcbParser.h"
@@ -34,6 +35,17 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(layer_panel_, &LayerPanel::visibility_changed,
             canvas_, &PcbCanvas::setLayerVisibility);
 
+    // Analysis dock under Layers.
+    analysis_panel_ = new AnalysisPanel(this);
+    auto* an_dock = new QDockWidget("Analysis", this);
+    an_dock->setWidget(analysis_panel_);
+    an_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    addDockWidget(Qt::RightDockWidgetArea, an_dock);
+    connect(analysis_panel_, &AnalysisPanel::runRequested,
+            this, &MainWindow::onAnalyzeStaticIrDrop);
+    connect(analysis_panel_, &AnalysisPanel::clearRequested,
+            canvas_, [this]() { canvas_->setIrResult({}); });
+
     auto* fileMenu = menuBar()->addMenu("&File");
     auto* openAct = fileMenu->addAction("&Open KiCad PCB...");
     openAct->setShortcut(QKeySequence::Open);
@@ -46,6 +58,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     fitAct->setShortcut(QKeySequence(Qt::Key_Home));
     connect(fitAct, &QAction::triggered, canvas_, &PcbCanvas::fitToBoard);
     viewMenu->addAction(dock->toggleViewAction());
+    viewMenu->addAction(an_dock->toggleViewAction());
 
     auto* analyzeMenu = menuBar()->addMenu("&Analyze");
     auto* irAct = analyzeMenu->addAction("Static &IR drop on F.Cu");
@@ -80,25 +93,15 @@ void MainWindow::onAnalyzeStaticIrDrop() {
         return;
     }
 
-    // v0 net selection: first net that has at least one zone on F.Cu (ord 0).
-    // Future commit replaces this with a proper net-selector UI.
-    int target_net = -1;
-    for (const auto& z : board_->zones) {
-        if (z.layer_ordinal == 0 && !z.filled.empty()) {
-            target_net = z.net_id;
-            break;
-        }
-    }
-    if (target_net < 0) {
+    // Net, layer, source/sink, current, and cell size all come from the
+    // AnalysisPanel — see currentConfig() / currentTotalCurrent().
+    auto mc = analysis_panel_->currentConfig();
+    const double total_current = analysis_panel_->currentTotalCurrent();
+    if (mc.net_id < 0) {
         QMessageBox::warning(this, "Static IR drop",
-                             "No zone fill found on F.Cu — nothing to analyze.");
+                             "No net with copper zones available.");
         return;
     }
-
-    pdnkit::pi::MeshConfig mc;
-    mc.cell_size = 0.5e-3;  // 0.5 mm default; ~thousands of nodes per cm²
-    mc.net_id = target_net;
-    mc.layer_ordinal = 0;
     auto mesh = pdnkit::pi::IrMesher::build(*board_, mc);
     if (mesh.nodes.empty()) {
         QMessageBox::warning(this, "Static IR drop",
@@ -113,7 +116,7 @@ void MainWindow::onAnalyzeStaticIrDrop() {
         return;
     }
 
-    auto sol = pdnkit::pi::IrSolver::solve(mesh, {1.0});
+    auto sol = pdnkit::pi::IrSolver::solve(mesh, {total_current});
     if (!sol.ok) {
         QMessageBox::critical(this, "Static IR drop",
                               QString("Solver failed: %1")
@@ -125,23 +128,29 @@ void MainWindow::onAnalyzeStaticIrDrop() {
                                                              mc.cell_size);
     canvas_->setIrResult(std::move(result_mesh));
 
-    const auto* net = board_->find_net(target_net);
+    const auto* net = board_->find_net(mc.net_id);
     const QString net_name = (net && !net->name.empty())
         ? QString::fromStdString(net->name)
-        : QString("net %1").arg(target_net);
+        : QString("net %1").arg(mc.net_id);
     const double v_drop_mv = (sol.max_v - sol.min_v) * 1000.0;
+    const auto* layer = board_->find_layer(mc.layer_ordinal);
+    const QString layer_name = layer
+        ? QString::fromStdString(layer->name)
+        : QString("layer %1").arg(mc.layer_ordinal);
     statusBar()->showMessage(
-        QString("IR drop on %1 (F.Cu, 1A): %2 nodes, %3 resistors, "
-                "Vmax = %4 mV, Vmin = %5 mV  (drop %6 mV)")
+        QString("IR drop on %1 (%2, %3A): %4 nodes, %5 resistors, "
+                "Vmax = %6 mV, Vmin = %7 mV  (drop %8 mV)")
             .arg(net_name)
+            .arg(layer_name)
+            .arg(total_current, 0, 'f', 3)
             .arg(mesh.nodes.size())
             .arg(mesh.resistors.size())
             .arg(sol.max_v * 1000.0, 0, 'f', 4)
             .arg(sol.min_v * 1000.0, 0, 'f', 4)
             .arg(v_drop_mv, 0, 'f', 4));
-    spdlog::info("IR drop on net {} ({}): {} nodes, {} resistors, "
+    spdlog::info("IR drop on net {} ({}) layer {}: {} nodes, {} resistors, "
                  "Vmax={:.6f}V, Vmin={:.6f}V",
-                 target_net, net_name.toStdString(),
+                 mc.net_id, net_name.toStdString(), mc.layer_ordinal,
                  mesh.nodes.size(), mesh.resistors.size(),
                  sol.max_v, sol.min_v);
 }
@@ -177,6 +186,7 @@ bool MainWindow::loadKicadPcb(const QString& path) {
         board_ = std::move(board);
         canvas_->setBoard(board_.get());
         populateLayerPanel();
+        analysis_panel_->setBoard(board_.get());
 
         spdlog::info("loaded {}: {} layers ({} copper), {} nets, {} segments, "
                      "{} vias, {} pads, {} zones",

@@ -7,6 +7,7 @@
 
 class PcbCanvas;
 class LayerPanel;
+class AnalysisPanel;
 class QLabel;
 
 class MainWindow : public QMainWindow {
@@ -27,6 +28,7 @@ private:
 
     PcbCanvas* canvas_;
     LayerPanel* layer_panel_;
+    AnalysisPanel* analysis_panel_;
     QLabel* hover_label_;
     std::unique_ptr<pdnkit::model::Board> board_;
 };
