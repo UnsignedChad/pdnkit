@@ -142,6 +142,13 @@ void PcbCanvas::setIrResult(pdnkit::render::IrResultMesh result) {
     update();
 }
 
+void PcbCanvas::setProbeSource(pdnkit::pi::IrMesh mesh,
+                                pdnkit::pi::Solution solution) {
+    probe_mesh_ = std::move(mesh);
+    probe_solution_ = std::move(solution);
+    update();
+}
+
 void PcbCanvas::setDecapMarkers(const std::vector<pdnkit::model::Point2>& positions) {
     pending_decaps_ = positions;
     decaps_dirty_ = true;
@@ -651,6 +658,29 @@ void PcbCanvas::mouseMoveEvent(QMouseEvent* e) {
                        .arg(net_name)
                        .arg(hit.net_id)
                        .arg(layer_name);
+        }
+
+        // Voltage probe: if an IR-drop solution is loaded, find the nearest
+        // mesh node to the cursor and append its voltage to the hover info.
+        if (probe_solution_.ok &&
+            !probe_mesh_.nodes.empty() &&
+            probe_solution_.voltages.size() == probe_mesh_.nodes.size()) {
+            int best = -1;
+            double best_d2 = 1e30;
+            for (std::size_t i = 0; i < probe_mesh_.nodes.size(); ++i) {
+                const double dx = probe_mesh_.nodes[i].x - world.x;
+                const double dy = probe_mesh_.nodes[i].y - world.y;
+                const double d2 = dx * dx + dy * dy;
+                if (d2 < best_d2) { best_d2 = d2; best = static_cast<int>(i); }
+            }
+            if (best >= 0) {
+                const double v = probe_solution_.voltages[best];
+                const QString v_str = (std::abs(v) >= 1.0)
+                    ? QString::number(v, 'f', 4) + " V"
+                    : QString::number(v * 1000.0, 'f', 4) + " mV";
+                if (!info.isEmpty()) info += "   ";
+                info += "V = " + v_str;
+            }
         }
         emit hoverInfo(info);
     }

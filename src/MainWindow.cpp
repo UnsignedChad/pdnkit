@@ -217,6 +217,7 @@ void MainWindow::onAnalyzeStaticIrDrop() {
                                                              mc.cell_size);
     canvas_->setIrResult(std::move(result_mesh));
     legend_->setRange(sol.min_v, sol.max_v);
+    canvas_->setProbeSource(mesh, sol);
     last_mesh_ = std::move(mesh);
     last_solution_ = std::move(sol);
 

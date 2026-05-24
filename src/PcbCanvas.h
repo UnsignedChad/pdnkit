@@ -13,6 +13,7 @@
 #include "model/Board.h"
 #include "render/Camera2D.h"
 #include "render/IrResultMesh.h"
+#include "pi/IrSolver.h"
 #include "render/SegmentMesher.h"
 
 class PcbCanvas : public QOpenGLWidget, protected QOpenGLFunctions_3_3_Core {
@@ -33,6 +34,12 @@ public:
     // Attach (or clear, with an empty mesh) an IR-drop heat-map overlay.
     // Uploaded lazily on the next paintGL.
     void setIrResult(pdnkit::render::IrResultMesh result);
+
+    // Optionally pass the underlying IR-drop mesh + solution so the hover
+    // probe can sample voltage at the cursor location. Pass an empty
+    // mesh/solution (mesh.nodes.empty()) to clear.
+    void setProbeSource(pdnkit::pi::IrMesh mesh,
+                        pdnkit::pi::Solution solution);
 
     // Decoupling-cap position markers (world coords in meters), rendered
     // as blue dots over everything. CavityPanel pushes this list whenever
@@ -98,6 +105,11 @@ private:
     std::vector<pdnkit::render::IrResultMesh::LayerRange> heat_layer_ranges_;
     int heat_index_count_ = 0;
     bool heat_dirty_ = false;
+
+    // Mesh + solution backing the active heat overlay, used for cursor-probe
+    // voltage sampling. Empty when no IR-drop result is loaded.
+    pdnkit::pi::IrMesh probe_mesh_;
+    pdnkit::pi::Solution probe_solution_;
 
     // Marker overlay for sources/sinks (rendered with flat shader after heat).
     QOpenGLBuffer marker_vbo_{QOpenGLBuffer::VertexBuffer};
