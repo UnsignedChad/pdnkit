@@ -1,3 +1,4 @@
+#include <cmath>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -149,4 +150,54 @@ TEST_CASE("mesher: bbox matches the source polygon bbox", "[irmesh]") {
     REQUIRE(m.bbox_lo_y == Approx(0.0));
     REQUIRE(m.bbox_hi_x == Approx(0.010));
     REQUIRE(m.bbox_hi_y == Approx(0.010));
+}
+
+TEST_CASE("mesher: explicit source/sink pad names override auto-pick", "[irmesh]") {
+    Board b = with_square_zone(1, 0, 0.010);
+    // Three pads — auto-pick would pick A (leftmost) and C (rightmost).
+    // Explicit config should pick B and C instead.
+    Pad pa; pa.at = {0.001, 0.005}; pa.net_id = 1; pa.layer_ordinals = {0}; pa.name = "A";
+    Pad pb; pb.at = {0.005, 0.005}; pb.net_id = 1; pb.layer_ordinals = {0}; pb.name = "B";
+    Pad pc; pc.at = {0.009, 0.005}; pc.net_id = 1; pc.layer_ordinals = {0}; pc.name = "C";
+    b.pads.push_back(pa);
+    b.pads.push_back(pb);
+    b.pads.push_back(pc);
+
+    MeshConfig cfg;
+    cfg.cell_size = 1.0e-3;
+    cfg.net_id = 1;
+    cfg.layer_ordinal = 0;
+    cfg.source_pad_names = {"B"};
+    cfg.sink_pad_names = {"C"};
+
+    auto m = IrMesher::build(b, cfg);
+    REQUIRE(m.source_node_ids.size() == 1);
+    REQUIRE(m.sink_node_ids.size() == 1);
+
+    const auto& src = m.nodes[m.source_node_ids[0]];
+    const auto& snk = m.nodes[m.sink_node_ids[0]];
+    // Source picked is the one nearest pad B (x ~= 0.005), not pad A
+    // (x = 0.001) — the grid snaps to the nearest cell center, which is
+    // 0.0045 or 0.0055 depending on tie-break.
+    REQUIRE(std::abs(src.x - 0.005) < 0.001);
+    REQUIRE(std::abs(snk.x - 0.009) < 0.001);
+}
+
+TEST_CASE("mesher: missing-name explicit list falls back to auto-pick", "[irmesh]") {
+    Board b = with_square_zone(1, 0, 0.010);
+    Pad p1; p1.at = {0.001, 0.005}; p1.net_id = 1; p1.layer_ordinals = {0}; p1.name = "L";
+    Pad p2; p2.at = {0.009, 0.005}; p2.net_id = 1; p2.layer_ordinals = {0}; p2.name = "R";
+    b.pads.push_back(p1);
+    b.pads.push_back(p2);
+
+    MeshConfig cfg;
+    cfg.cell_size = 1.0e-3;
+    cfg.net_id = 1;
+    cfg.layer_ordinal = 0;
+    cfg.source_pad_names = {"DoesNotExist"};  // explicit but no match
+
+    auto m = IrMesher::build(b, cfg);
+    // source auto-fills to leftmost (L); sink also auto-fills to rightmost (R).
+    REQUIRE(m.source_node_ids.size() == 1);
+    REQUIRE(m.sink_node_ids.size() == 1);
 }

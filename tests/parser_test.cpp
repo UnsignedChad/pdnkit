@@ -135,6 +135,9 @@ TEST_CASE("parser: footprint pads transformed by footprint origin", "[parser]") 
     REQUIRE(b.pads[1].net_id == 1);
     REQUIRE(b.pads[0].layer_ordinals.size() == 1);
     REQUIRE(b.pads[0].layer_ordinals[0] == 0);
+    // Pad name extracted from (pad "1" ...) form.
+    REQUIRE(b.pads[0].name == "1");
+    REQUIRE(b.pads[1].name == "2");
 }
 
 TEST_CASE("parser: unknown layer name in segment is an error", "[parser]") {

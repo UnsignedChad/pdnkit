@@ -233,6 +233,11 @@ private:
 
             for (const Node* pad : find_children(*fp, "pad")) {
                 model::Pad p;
+                // KiCad pad form: (pad "<name>" <type> <shape> ...)
+                if (pad->children.size() >= 2 &&
+                    (pad->children[1].is_string() || pad->children[1].is_symbol())) {
+                    p.name = pad->children[1].text;
+                }
                 if (const Node* at = find_child(*pad, "at")) {
                     model::Point2 local = read_xy_tail(*at);
                     // Rotate local by fp_rot then translate by fp_at.

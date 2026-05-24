@@ -66,6 +66,7 @@ struct Pad {
     double rotation = 0.0;     // radians
     std::vector<int> layer_ordinals;
     int net_id = 0;
+    std::string name;          // KiCad pad designator ("1", "+", etc.)
 };
 
 // A closed polygon, possibly with holes (interior cutouts).

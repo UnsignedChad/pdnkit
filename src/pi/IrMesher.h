@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "model/Board.h"
@@ -27,6 +28,12 @@ struct MeshConfig {
     double copper_rho = 1.68e-8;        // copper resistivity Ω·m at 20°C
     int net_id = 0;                     // target net (e.g., a power rail)
     int layer_ordinal = 0;              // target copper layer
+
+    // Optional explicit source/sink pad selection by pad name. When non-empty,
+    // these override the v0 leftmost/rightmost auto-pick. Pads must match
+    // (net_id, layer_ordinal) and have the given name.
+    std::vector<std::string> source_pad_names;
+    std::vector<std::string> sink_pad_names;
 };
 
 struct Node {

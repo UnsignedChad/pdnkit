@@ -162,25 +162,56 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
         return best;
     };
 
-    const model::Pad* src = nullptr;
-    const model::Pad* snk = nullptr;
-    for (const auto& p : board.pads) {
-        if (p.net_id != cfg.net_id) continue;
-        bool on_layer = false;
+    auto pad_on_target = [&](const model::Pad& p) {
+        if (p.net_id != cfg.net_id) return false;
         for (int o : p.layer_ordinals) {
-            if (o == cfg.layer_ordinal) { on_layer = true; break; }
+            if (o == cfg.layer_ordinal) return true;
         }
-        if (!on_layer) continue;
-        if (!src || p.at.x < src->at.x) src = &p;
-        if (!snk || p.at.x > snk->at.x) snk = &p;
+        return false;
+    };
+    auto name_in = [](const std::vector<std::string>& names,
+                       const std::string& n) {
+        for (const auto& s : names) {
+            if (s == n) return true;
+        }
+        return false;
+    };
+
+    const bool explicit_src = !cfg.source_pad_names.empty();
+    const bool explicit_snk = !cfg.sink_pad_names.empty();
+
+    if (explicit_src || explicit_snk) {
+        // Use explicit pad lists.
+        for (const auto& pad : board.pads) {
+            if (!pad_on_target(pad)) continue;
+            const int nid = nearest_node(pad.at.x, pad.at.y);
+            if (nid < 0) continue;
+            if (explicit_src && name_in(cfg.source_pad_names, pad.name)) {
+                mesh.source_node_ids.push_back(nid);
+            }
+            if (explicit_snk && name_in(cfg.sink_pad_names, pad.name)) {
+                mesh.sink_node_ids.push_back(nid);
+            }
+        }
     }
-    if (src && !mesh.nodes.empty()) {
-        const int nid = nearest_node(src->at.x, src->at.y);
-        if (nid >= 0) mesh.source_node_ids.push_back(nid);
-    }
-    if (snk && snk != src && !mesh.nodes.empty()) {
-        const int nid = nearest_node(snk->at.x, snk->at.y);
-        if (nid >= 0) mesh.sink_node_ids.push_back(nid);
+
+    // Auto-fill anything still missing with leftmost / rightmost pad.
+    if (mesh.source_node_ids.empty() || mesh.sink_node_ids.empty()) {
+        const model::Pad* src = nullptr;
+        const model::Pad* snk = nullptr;
+        for (const auto& pad : board.pads) {
+            if (!pad_on_target(pad)) continue;
+            if (!src || pad.at.x < src->at.x) src = &pad;
+            if (!snk || pad.at.x > snk->at.x) snk = &pad;
+        }
+        if (mesh.source_node_ids.empty() && src && !mesh.nodes.empty()) {
+            const int nid = nearest_node(src->at.x, src->at.y);
+            if (nid >= 0) mesh.source_node_ids.push_back(nid);
+        }
+        if (mesh.sink_node_ids.empty() && snk && snk != src && !mesh.nodes.empty()) {
+            const int nid = nearest_node(snk->at.x, snk->at.y);
+            if (nid >= 0) mesh.sink_node_ids.push_back(nid);
+        }
     }
 
     return mesh;
