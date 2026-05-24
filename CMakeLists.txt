@@ -76,6 +76,8 @@ add_executable(pdnkit
     src/AnalysisPanel.cpp
     src/NetStatsPanel.cpp
     src/CavityPanel.cpp
+    src/TransientPanel.cpp
+    src/TransientPlotWidget.cpp
     src/ZfPlotWidget.cpp
     src/ColorLegend.cpp
 )

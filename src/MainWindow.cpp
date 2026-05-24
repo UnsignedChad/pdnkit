@@ -20,6 +20,7 @@
 #include "AnalysisPanel.h"
 #include "ColorLegend.h"
 #include "CavityPanel.h"
+#include "TransientPanel.h"
 #include "NetStatsPanel.h"
 #include "LayerPanel.h"
 #include "PcbCanvas.h"
@@ -87,6 +88,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                 canvas_->setIrResult(std::move(m));
             });
 
+    transient_panel_ = new TransientPanel(this);
+    auto* trn_dock = new QDockWidget("Transient", this);
+    trn_dock->setWidget(transient_panel_);
+    trn_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    addDockWidget(Qt::RightDockWidgetArea, trn_dock);
+    tabifyDockWidget(an_dock, trn_dock);
+
     auto* fileMenu = menuBar()->addMenu("&File");
     auto* openAct = fileMenu->addAction("&Open KiCad PCB...");
     openAct->setShortcut(QKeySequence::Open);
@@ -111,6 +119,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     viewMenu->addAction(an_dock->toggleViewAction());
     viewMenu->addAction(nets_dock->toggleViewAction());
     viewMenu->addAction(cav_dock->toggleViewAction());
+    viewMenu->addAction(trn_dock->toggleViewAction());
 
     auto* analyzeMenu = menuBar()->addMenu("&Analyze");
     auto* irAct = analyzeMenu->addAction("Static &IR drop on F.Cu");
@@ -284,6 +293,7 @@ bool MainWindow::loadKicadPcb(const QString& path) {
         analysis_panel_->setBoard(board_.get());
         netstats_panel_->setBoard(board_.get());
         cavity_panel_->setBoard(board_.get());
+        transient_panel_->setBoard(board_.get());
 
         spdlog::info("loaded {}: {} layers ({} copper), {} nets, {} segments, "
                      "{} vias, {} pads, {} zones",

@@ -19,6 +19,7 @@
 #include "pi/IrMesher.h"
 #include "pi/CavityModel.h"
 #include "pi/IrSolver.h"
+#include "pi/Transient.h"
 
 namespace {
 
@@ -188,6 +189,75 @@ int run_headless_zf(const std::string& pcb_path,
     return 0;
 }
 
+int run_headless_transient(const std::string& pcb_path,
+                           const std::string& net_name,
+                           const std::string& layer_name,
+                           double current_a,
+                           double cell_size_mm,
+                           double dt_ns,
+                           int n_steps,
+                           double eps_r,
+                           double thickness_mm) {
+    pdnkit::model::Board board;
+    try {
+        board = pdnkit::parser::KicadPcbParser::parse_file(pcb_path);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "pdnkit: parse failed: %s\n", e.what());
+        return 2;
+    }
+    const auto* net = board.find_net_by_name(net_name);
+    if (!net) {
+        std::fprintf(stderr, "pdnkit: no net named '%s'\n", net_name.c_str());
+        return 3;
+    }
+    int layer_ord = -1;
+    for (const auto& L : board.stackup.layers) {
+        if (L.name == layer_name) { layer_ord = L.ordinal; break; }
+    }
+    if (layer_ord < 0) {
+        std::fprintf(stderr, "pdnkit: no layer named '%s'\n", layer_name.c_str());
+        return 4;
+    }
+
+    pdnkit::pi::MeshConfig mc;
+    mc.cell_size = cell_size_mm * 1.0e-3;
+    mc.net_id = net->id;
+    mc.layer_ordinal = layer_ord;
+    auto mesh = pdnkit::pi::IrMesher::build(board, mc);
+    if (mesh.nodes.empty()) {
+        std::fprintf(stderr, "pdnkit: mesher produced no nodes\n");
+        return 5;
+    }
+    if (mesh.source_node_ids.empty() || mesh.sink_node_ids.empty()) {
+        std::fprintf(stderr, "pdnkit: need at least 2 pads on net for "
+                             "source/sink\n");
+        return 6;
+    }
+
+    auto c_vec = pdnkit::pi::build_distributed_capacitance(
+        mesh, mc.cell_size, eps_r, thickness_mm * 1.0e-3, {});
+
+    pdnkit::pi::TransientConfig tcfg;
+    tcfg.per_node_capacitances = std::move(c_vec);
+    tcfg.dt = dt_ns * 1.0e-9;
+    tcfg.n_steps = n_steps;
+    tcfg.step_current = current_a;
+
+    auto res = pdnkit::pi::solve_step_transient(mesh, tcfg);
+    if (!res.ok) {
+        std::fprintf(stderr, "pdnkit: transient solve failed: %s\n",
+                     res.error.c_str());
+        return 7;
+    }
+
+    std::printf("time_s,v_obs_v,v_max_v\n");
+    for (std::size_t i = 0; i < res.times.size(); ++i) {
+        std::printf("%.8g,%.8g,%.8g\n",
+                    res.times[i], res.obs_v[i], res.max_v[i]);
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -236,6 +306,16 @@ int main(int argc, char** argv) {
     cli.add_option("--points", zf_points, "Number of log-spaced frequency points");
     cli.add_option("--modes", zf_modes, "Mode sum truncation per axis");
 
+    bool transient = false;
+    double trn_dt_ns = 10.0;
+    int trn_steps = 1000;
+    cli.add_flag("--transient", transient,
+                 "Run a step-response transient analysis headlessly and print "
+                 "CSV (time_s,v_obs_v,v_max_v) to stdout. Uses --net/--layer "
+                 "for the mesh and --current for the step amplitude.");
+    cli.add_option("--dt-ns", trn_dt_ns, "Transient timestep in nanoseconds (default 10)");
+    cli.add_option("--n-steps", trn_steps, "Number of transient timesteps (default 1000)");
+
     try {
         cli.parse(argc, argv);
     } catch (const CLI::ParseError& e) {
@@ -263,6 +343,17 @@ int main(int argc, char** argv) {
                                zf_p1x, zf_p1y, zf_p2x, zf_p2y,
                                zf_eps_r, zf_tan_delta, zf_thickness_mm,
                                zf_f_min, zf_f_max, zf_points, zf_modes);
+    }
+    if (transient) {
+        if (pcb_path.empty()) {
+            std::fprintf(stderr,
+                         "pdnkit: --transient requires a board file\n");
+            return 1;
+        }
+        return run_headless_transient(pcb_path, analyze_net, analyze_layer,
+                                      analyze_current, analyze_cell_mm,
+                                      trn_dt_ns, trn_steps,
+                                      zf_eps_r, zf_thickness_mm);
     }
 
     QSurfaceFormat fmt;
