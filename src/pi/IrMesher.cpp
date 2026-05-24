@@ -195,6 +195,18 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
         }
     }
 
+    // If per-pad currents are specified, map them to nodes via nearest-node.
+    // This takes priority over source/sink lists in the solver.
+    if (!cfg.pad_currents.empty()) {
+        for (const auto& pad : board.pads) {
+            if (!pad_on_target(pad)) continue;
+            auto it = cfg.pad_currents.find(pad.name);
+            if (it == cfg.pad_currents.end()) continue;
+            const int nid = nearest_node(pad.at.x, pad.at.y);
+            if (nid >= 0) mesh.node_currents.emplace_back(nid, it->second);
+        }
+    }
+
     // Auto-fill anything still missing with leftmost / rightmost pad.
     if (mesh.source_node_ids.empty() || mesh.sink_node_ids.empty()) {
         const model::Pad* src = nullptr;

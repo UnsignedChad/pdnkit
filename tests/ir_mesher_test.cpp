@@ -201,3 +201,25 @@ TEST_CASE("mesher: missing-name explicit list falls back to auto-pick", "[irmesh
     REQUIRE(m.source_node_ids.size() == 1);
     REQUIRE(m.sink_node_ids.size() == 1);
 }
+
+TEST_CASE("mesher: explicit pad_currents populate node_currents", "[irmesh]") {
+    Board b = with_square_zone(1, 0, 0.010);
+    Pad p1; p1.at = {0.001, 0.005}; p1.net_id = 1; p1.layer_ordinals = {0}; p1.name = "A";
+    Pad p2; p2.at = {0.005, 0.005}; p2.net_id = 1; p2.layer_ordinals = {0}; p2.name = "B";
+    Pad p3; p3.at = {0.009, 0.005}; p3.net_id = 1; p3.layer_ordinals = {0}; p3.name = "C";
+    b.pads.push_back(p1);
+    b.pads.push_back(p2);
+    b.pads.push_back(p3);
+
+    MeshConfig cfg;
+    cfg.cell_size = 1.0e-3;
+    cfg.net_id = 1;
+    cfg.layer_ordinal = 0;
+    cfg.pad_currents = {{"A", 2.0}, {"B", -0.5}, {"C", -1.5}};
+
+    auto m = IrMesher::build(b, cfg);
+    REQUIRE(m.node_currents.size() == 3);
+    double sum = 0;
+    for (auto& [_, c] : m.node_currents) sum += c;
+    REQUIRE(sum == Approx(0.0).margin(1e-9));
+}

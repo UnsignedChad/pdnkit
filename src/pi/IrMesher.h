@@ -16,6 +16,7 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "model/Board.h"
@@ -34,6 +35,12 @@ struct MeshConfig {
     // (net_id, layer_ordinal) and have the given name.
     std::vector<std::string> source_pad_names;
     std::vector<std::string> sink_pad_names;
+
+    // Optional per-pad current map (key = pad name, value = Amperes;
+    // + injects, - draws). When non-empty, overrides BOTH source/sink lists
+    // and the solver default split-over-source behavior -- the solver builds
+    // its RHS directly from these. Sum must be ~0 (current conservation).
+    std::unordered_map<std::string, double> pad_currents;
 };
 
 struct Node {
@@ -53,8 +60,18 @@ struct Resistor {
 struct IrMesh {
     std::vector<Node> nodes;
     std::vector<Resistor> resistors;
+
+    // v0 source/sink lists. Solver uses these when node_currents is empty:
+    // total_current is split across sources, sinks are pinned to 0 V.
     std::vector<int> source_node_ids;
     std::vector<int> sink_node_ids;
+
+    // Per-node explicit currents (Amperes; + injects, - draws). When
+    // non-empty, the solver uses this directly and ignores source/sink
+    // lists / SolveConfig::total_current. Populated by the mesher when
+    // MeshConfig::pad_currents is non-empty.
+    std::vector<std::pair<int, double>> node_currents;
+
     // World-space bbox of the meshed copper (handy for renderers).
     double bbox_lo_x = 0.0, bbox_lo_y = 0.0;
     double bbox_hi_x = 0.0, bbox_hi_y = 0.0;

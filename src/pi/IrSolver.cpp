@@ -1,6 +1,7 @@
 #include "pi/IrSolver.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 
 #include <Eigen/SparseCholesky>
@@ -16,14 +17,37 @@ Solution IrSolver::solve(const IrMesh& mesh, const SolveConfig& cfg) {
         sol.error = "empty mesh";
         return sol;
     }
-    if (mesh.source_node_ids.empty()) {
-        sol.error = "no source nodes";
-        return sol;
-    }
-    if (mesh.sink_node_ids.empty()) {
-        sol.error = "no sink nodes (the matrix would be singular without a "
-                    "pinned reference)";
-        return sol;
+    const bool explicit_currents = !mesh.node_currents.empty();
+    if (!explicit_currents) {
+        if (mesh.source_node_ids.empty()) {
+            sol.error = "no source nodes";
+            return sol;
+        }
+        if (mesh.sink_node_ids.empty()) {
+            sol.error = "no sink nodes (the matrix would be singular without "
+                        "a pinned reference)";
+            return sol;
+        }
+    } else {
+        // Explicit currents: must sum to ~0 (current conservation) and contain
+        // at least one negative entry to pin as the reference.
+        double sum = 0.0;
+        bool has_negative = false;
+        for (const auto& [nid, cur] : mesh.node_currents) {
+            (void)nid;
+            sum += cur;
+            if (cur < 0.0) has_negative = true;
+        }
+        if (std::abs(sum) > 1.0e-9 * (1.0 + std::abs(sum))) {
+            sol.error = "per-node currents do not sum to zero (charge would "
+                        "accumulate); injected and drawn currents must balance";
+            return sol;
+        }
+        if (!has_negative) {
+            sol.error = "per-node currents have no sink (all currents >= 0); "
+                        "need at least one negative current as ground reference";
+            return sol;
+        }
     }
 
     // 1) Conductance matrix G (N×N, SPSD). Each resistor between (a, b) with
@@ -43,13 +67,29 @@ Solution IrSolver::solve(const IrMesh& mesh, const SolveConfig& cfg) {
         triplets.emplace_back(r.to_node,   r.from_node, -r.conductance);
     }
 
-    // 2) Pin sinks to ~0 V via a large diagonal entry. With G typical entries
-    //    around a few thousand S, 1e15 dominates by ~11 orders of magnitude
-    //    while staying well clear of double-precision overflow during factor.
+    // 2) Pin a reference node to 0 V via large-diagonal stiffness. With G
+    //    typical entries around a few thousand S, 1e15 dominates by ~11
+    //    orders of magnitude while staying clear of double-precision overflow.
     constexpr double kPinStiffness = 1.0e15;
-    for (int s : mesh.sink_node_ids) {
-        if (s >= 0 && s < static_cast<int>(N)) {
-            triplets.emplace_back(s, s, kPinStiffness);
+
+    if (!explicit_currents) {
+        for (int s : mesh.sink_node_ids) {
+            if (s >= 0 && s < static_cast<int>(N)) {
+                triplets.emplace_back(s, s, kPinStiffness);
+            }
+        }
+    } else {
+        // Pin the most-negative-current node (the deepest sink).
+        int pin_node = -1;
+        double pin_value = 0.0;
+        for (const auto& [nid, cur] : mesh.node_currents) {
+            if (cur < pin_value && nid >= 0 && nid < static_cast<int>(N)) {
+                pin_value = cur;
+                pin_node = nid;
+            }
+        }
+        if (pin_node >= 0) {
+            triplets.emplace_back(pin_node, pin_node, kPinStiffness);
         }
     }
 
@@ -58,13 +98,19 @@ Solution IrSolver::solve(const IrMesh& mesh, const SolveConfig& cfg) {
     G.setFromTriplets(triplets.begin(), triplets.end());
     G.makeCompressed();
 
-    // 3) RHS: total_current split evenly across source nodes; pinned sinks
-    //    have RHS = 0 (already initialized).
+    // 3) RHS construction.
     Eigen::VectorXd b = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(N));
-    const double per_source = cfg.total_current /
-                              static_cast<double>(mesh.source_node_ids.size());
-    for (int s : mesh.source_node_ids) {
-        if (s >= 0 && s < static_cast<int>(N)) b[s] += per_source;
+    if (!explicit_currents) {
+        // Default: total_current split evenly across source nodes.
+        const double per_source = cfg.total_current /
+            static_cast<double>(mesh.source_node_ids.size());
+        for (int s : mesh.source_node_ids) {
+            if (s >= 0 && s < static_cast<int>(N)) b[s] += per_source;
+        }
+    } else {
+        for (const auto& [nid, cur] : mesh.node_currents) {
+            if (nid >= 0 && nid < static_cast<int>(N)) b[nid] += cur;
+        }
     }
 
     // 4) Solve with sparse Cholesky.

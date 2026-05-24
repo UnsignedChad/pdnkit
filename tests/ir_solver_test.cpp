@@ -146,3 +146,44 @@ TEST_CASE("solver: end-to-end with mesher on a 10mm square zone", "[solver][e2e]
     REQUIRE(sol.max_v < 5.0e-3);   // < 5 mV — well below the bulk sheet-R bound
     REQUIRE(sol.min_v == Approx(0.0).margin(1e-9));
 }
+
+TEST_CASE("solver: explicit node_currents (multi-source/sink balance)", "[solver]") {
+    // 5-node line: 0 - 1 - 2 - 3 - 4, conductance G between each pair.
+    IrMesh m;
+    for (int i = 0; i < 5; ++i) m.nodes.push_back({i, double(i), 0, i, 0});
+    const double G = 1000.0;
+    for (int i = 0; i < 4; ++i) m.resistors.push_back({i, i + 1, G});
+    // Two sources (0 and 4 each injecting 0.5A), one sink (2 drawing 1.0A).
+    m.node_currents = {{0, 0.5}, {4, 0.5}, {2, -1.0}};
+
+    auto s = IrSolver::solve(m, {});
+    REQUIRE(s.ok);
+    // Center node (pinned sink) ~0. Ends symmetric.
+    REQUIRE(s.voltages[2] == Approx(0.0).margin(1e-9));
+    REQUIRE(s.voltages[0] == Approx(s.voltages[4]).margin(1e-6));
+    REQUIRE(s.voltages[0] > 0.0);
+}
+
+TEST_CASE("solver: explicit currents must sum to zero", "[solver]") {
+    IrMesh m;
+    for (int i = 0; i < 3; ++i) m.nodes.push_back({i, double(i), 0, i, 0});
+    m.resistors.push_back({0, 1, 1000});
+    m.resistors.push_back({1, 2, 1000});
+    // Sum = 0.5 (charge accumulates) -- solver should refuse.
+    m.node_currents = {{0, 1.0}, {2, -0.5}};
+
+    auto s = IrSolver::solve(m, {});
+    REQUIRE_FALSE(s.ok);
+}
+
+TEST_CASE("solver: explicit currents need at least one sink", "[solver]") {
+    IrMesh m;
+    for (int i = 0; i < 3; ++i) m.nodes.push_back({i, double(i), 0, i, 0});
+    m.resistors.push_back({0, 1, 1000});
+    m.resistors.push_back({1, 2, 1000});
+    // All positive -- no ground reference.
+    m.node_currents = {{0, 1.0}, {2, 1.0}};
+
+    auto s = IrSolver::solve(m, {});
+    REQUIRE_FALSE(s.ok);
+}
