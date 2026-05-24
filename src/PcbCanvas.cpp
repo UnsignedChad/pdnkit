@@ -142,6 +142,13 @@ void PcbCanvas::setIrResult(pdnkit::render::IrResultMesh result) {
     update();
 }
 
+void PcbCanvas::setDecapMarkers(const std::vector<pdnkit::model::Point2>& positions) {
+    pending_decaps_ = positions;
+    decaps_dirty_ = true;
+    update();
+}
+
+
 void PcbCanvas::initializeGL() {
     initializeOpenGLFunctions();
     glClearColor(0.10f, 0.10f, 0.12f, 1.0f);
@@ -203,6 +210,18 @@ void PcbCanvas::initializeGL() {
     marker_vao_.release();
     marker_vbo_.release();
     marker_ibo_.release();
+
+    decap_vao_.create();
+    decap_vbo_.create();
+    decap_ibo_.create();
+    decap_vao_.bind();
+    decap_vbo_.bind();
+    decap_ibo_.bind();
+    flat_prog_.enableAttributeArray(0);
+    flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+    decap_vao_.release();
+    decap_vbo_.release();
+    decap_ibo_.release();
 }
 
 void PcbCanvas::buildGrid() {
@@ -446,6 +465,41 @@ void PcbCanvas::paintGL() {
                                    marker_sink_index_start_ * sizeof(std::uint32_t))));
         }
         marker_vao_.release();
+        flat_prog_.release();
+    }
+
+    // Decap markers: blue dots over everything (rebuilt lazily here so the
+    // GL context is current when we touch buffers).
+    if (decaps_dirty_) {
+        pdnkit::render::LayerMesh dm;
+        const double r = 0.6e-3;
+        for (const auto& p : pending_decaps_) {
+            pdnkit::render::append_disk(dm, p.x, p.y, r, 24);
+        }
+        decap_index_count_ = static_cast<int>(dm.indices.size());
+
+        decap_vao_.bind();
+        decap_vbo_.bind();
+        decap_vbo_.allocate(dm.vertices.data(),
+                            static_cast<int>(dm.vertices.size() * sizeof(float)));
+        decap_ibo_.bind();
+        decap_ibo_.allocate(dm.indices.data(),
+                            static_cast<int>(dm.indices.size() * sizeof(std::uint32_t)));
+        flat_prog_.enableAttributeArray(0);
+        flat_prog_.setAttributeBuffer(0, GL_FLOAT, 0, 2);
+        decap_vao_.release();
+        decap_vbo_.release();
+        decap_ibo_.release();
+        decaps_dirty_ = false;
+    }
+
+    if (decap_index_count_ > 0) {
+        flat_prog_.bind();
+        flat_prog_.setUniformValue("u_proj", proj);
+        flat_prog_.setUniformValue("u_color", QVector4D(0.30f, 0.55f, 0.98f, 1.0f));
+        decap_vao_.bind();
+        glDrawElements(GL_TRIANGLES, decap_index_count_, GL_UNSIGNED_INT, nullptr);
+        decap_vao_.release();
         flat_prog_.release();
     }
 }

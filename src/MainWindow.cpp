@@ -77,6 +77,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     cav_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     addDockWidget(Qt::RightDockWidgetArea, cav_dock);
     tabifyDockWidget(an_dock, cav_dock);
+    connect(cavity_panel_, &CavityPanel::decapsChanged,
+            canvas_, &PcbCanvas::setDecapMarkers);
 
     auto* fileMenu = menuBar()->addMenu("&File");
     auto* openAct = fileMenu->addAction("&Open KiCad PCB...");

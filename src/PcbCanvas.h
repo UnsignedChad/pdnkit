@@ -34,6 +34,11 @@ public:
     // Uploaded lazily on the next paintGL.
     void setIrResult(pdnkit::render::IrResultMesh result);
 
+    // Decoupling-cap position markers (world coords in meters), rendered
+    // as blue dots over everything. CavityPanel pushes this list whenever
+    // the user adds/removes/edits a decap.
+    void setDecapMarkers(const std::vector<pdnkit::model::Point2>& positions);
+
 signals:
     void hoverInfo(const QString& info);
 
@@ -96,6 +101,15 @@ private:
     int marker_source_index_count_ = 0;
     int marker_sink_index_start_ = 0;
     int marker_sink_index_count_ = 0;
+
+    // Decap position markers (separate buffer so cap edits don't disturb
+    // the IR-drop pipeline).
+    QOpenGLBuffer decap_vbo_{QOpenGLBuffer::VertexBuffer};
+    QOpenGLBuffer decap_ibo_{QOpenGLBuffer::IndexBuffer};
+    QOpenGLVertexArrayObject decap_vao_;
+    int decap_index_count_ = 0;
+    std::vector<pdnkit::model::Point2> pending_decaps_;
+    bool decaps_dirty_ = false;
 
     std::unordered_map<int, bool> layer_visible_;
 

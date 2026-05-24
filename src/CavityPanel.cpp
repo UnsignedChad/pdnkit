@@ -28,6 +28,20 @@
 
 namespace {
 
+std::vector<pdnkit::model::Point2> read_decap_positions(QTableWidget* t,
+                                                        double offset_x_m,
+                                                        double offset_y_m) {
+    std::vector<pdnkit::model::Point2> out;
+    for (int r = 0; r < t->rowCount(); ++r) {
+        auto* xi = t->item(r, 0);
+        auto* yi = t->item(r, 1);
+        if (!xi || !yi) continue;
+        out.push_back({xi->text().toDouble() * 1.0e-3 + offset_x_m,
+                       yi->text().toDouble() * 1.0e-3 + offset_y_m});
+    }
+    return out;
+}
+
 // Bounding box of the filled zones on (net, primary copper layer 0). Empty
 // returned when there is no zone fill matching the filter — caller decides.
 struct Bbox {
@@ -178,6 +192,9 @@ CavityPanel::CavityPanel(QWidget* parent) : QWidget(parent) {
     connect(clear_btn_, &QPushButton::clicked, this, &CavityPanel::onClear);
     connect(add_decap_btn_,    &QPushButton::clicked, this, &CavityPanel::onAddDecap);
     connect(remove_decap_btn_, &QPushButton::clicked, this, &CavityPanel::onRemoveDecap);
+    connect(decap_table_, &QTableWidget::itemChanged, this, [this](QTableWidgetItem*) {
+        emit decapsChanged(read_decap_positions(decap_table_, 0.0, 0.0));
+    });
 }
 
 void CavityPanel::onAddDecap() {
@@ -189,6 +206,7 @@ void CavityPanel::onAddDecap() {
     decap_table_->setItem(row, 2, new QTableWidgetItem(QString::number(1.0)));     // 1 uF
     decap_table_->setItem(row, 3, new QTableWidgetItem(QString::number(5.0)));     // 5 mOhm
     decap_table_->setItem(row, 4, new QTableWidgetItem(QString::number(0.5)));     // 0.5 nH
+    emit decapsChanged(read_decap_positions(decap_table_, 0.0, 0.0));
 }
 
 void CavityPanel::onRemoveDecap() {
@@ -198,6 +216,7 @@ void CavityPanel::onRemoveDecap() {
     for (auto& r : rows) idx.push_back(r.row());
     std::sort(idx.rbegin(), idx.rend());
     for (int r : idx) decap_table_->removeRow(r);
+    emit decapsChanged(read_decap_positions(decap_table_, 0.0, 0.0));
 }
 
 void CavityPanel::setBoard(const pdnkit::model::Board* board) {

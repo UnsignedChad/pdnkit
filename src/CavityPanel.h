@@ -24,6 +24,13 @@ public:
 
     void setBoard(const pdnkit::model::Board* board);
 
+signals:
+    // Fires whenever the decap list changes (add / remove / cell edit).
+    // Positions are world coords in meters relative to the plane corner
+    // — for now treat them as canvas world coords too (the cavity panel
+    // does not yet know the plane bbox offset in board coords).
+    void decapsChanged(const std::vector<pdnkit::model::Point2>& positions);
+
 private slots:
     void onRun();
     void onClear();
