@@ -36,6 +36,7 @@ private slots:
     void onOpenKicadPcb();
     void onReloadBoard();
     void onAnalyzeStaticIrDrop();
+    void onProbeRequested(int pad_a, int pad_b, int net_id, int layer_ord);
     void onSaveCanvasImage();
     void onExportResultsCsv();
     void onAboutDialog();

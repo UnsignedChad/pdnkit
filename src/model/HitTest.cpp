@@ -70,7 +70,8 @@ Hit at_point(const model::Board& board, model::Point2 world,
     constexpr double kVisualPadRadius = 0.50e-3;
 
     // 1. Pads (highest priority — small, on top).
-    for (const auto& p : board.pads) {
+    for (std::size_t i = 0; i < board.pads.size(); ++i) {
+        const auto& p = board.pads[i];
         const int layer = p.layer_ordinals.empty() ? 0 : p.layer_ordinals.front();
         bool hit = false;
         if (p.shape == model::PadShape::Circle || p.size.x <= 0.0 || p.size.y <= 0.0) {
@@ -90,30 +91,36 @@ Hit at_point(const model::Board& board, model::Point2 world,
             const double hh = 0.5 * p.size.y + pick_radius;
             if (std::abs(lx) <= hw && std::abs(ly) <= hh) hit = true;
         }
-        if (hit) return {Hit::Kind::Pad, p.net_id, layer};
+        if (hit) return {Hit::Kind::Pad, p.net_id, layer, static_cast<int>(i)};
     }
 
     // 2. Vias.
-    for (const auto& v : board.vias) {
+    for (std::size_t i = 0; i < board.vias.size(); ++i) {
+        const auto& v = board.vias[i];
         const double r = 0.5 * v.outer_diameter + pick_radius;
         if (dist_squared(world, v.at) <= r * r) {
-            return {Hit::Kind::Via, v.net_id, v.from_layer};
+            return {Hit::Kind::Via, v.net_id, v.from_layer,
+                    static_cast<int>(i)};
         }
     }
 
     // 3. Segments.
-    for (const auto& s : board.segments) {
-        const double tol = 0.5 * s.width + pick_radius;
-        if (dist_to_segment(world, s.start, s.end) <= tol) {
-            return {Hit::Kind::Segment, s.net_id, s.layer_ordinal};
+    for (std::size_t i = 0; i < board.segments.size(); ++i) {
+        const auto& seg = board.segments[i];
+        const double tol = 0.5 * seg.width + pick_radius;
+        if (dist_to_segment(world, seg.start, seg.end) <= tol) {
+            return {Hit::Kind::Segment, seg.net_id, seg.layer_ordinal,
+                    static_cast<int>(i)};
         }
     }
 
     // 4. Zones (largest, lowest priority).
-    for (const auto& z : board.zones) {
+    for (std::size_t i = 0; i < board.zones.size(); ++i) {
+        const auto& z = board.zones[i];
         for (const auto& fp : z.filled) {
             if (point_in_polygon(fp, world)) {
-                return {Hit::Kind::Zone, z.net_id, z.layer_ordinal};
+                return {Hit::Kind::Zone, z.net_id, z.layer_ordinal,
+                        static_cast<int>(i)};
             }
         }
     }

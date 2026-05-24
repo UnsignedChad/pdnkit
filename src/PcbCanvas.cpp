@@ -680,6 +680,56 @@ void PcbCanvas::mousePressEvent(QMouseEvent* e) {
     if (e->button() == Qt::MiddleButton || e->button() == Qt::LeftButton) {
         panning_ = true;
         last_mouse_ = e->pos();
+        return;
+    }
+    if (e->button() == Qt::RightButton && board_) {
+        // Right-click probe-R: first pad sets the source; second pad on the
+        // same net emits probeRequested. Right-click on empty space cancels.
+        const auto world = camera_.screen_to_world(
+            e->pos().x(), e->pos().y(), width(), height());
+        const double tol = 6.0 / camera_.pixels_per_meter;
+        const auto hit = pdnkit::hittest::at_point(*board_, world, tol);
+        if (hit.kind != pdnkit::hittest::Hit::Kind::Pad ||
+            hit.element_index < 0) {
+            if (probe_pad_a_ >= 0) {
+                probe_pad_a_ = -1;
+                emit probeHint("Probe R: selection cancelled.");
+            }
+            return;
+        }
+        if (probe_pad_a_ < 0) {
+            probe_pad_a_ = hit.element_index;
+            const auto& pad = board_->pads[probe_pad_a_];
+            const auto* net = board_->find_net(pad.net_id);
+            const QString net_name = (net && !net->name.empty())
+                ? QString::fromStdString(net->name)
+                : QString("(unnamed)");
+            emit probeHint(QString("Probe R: source pad '%1' on net %2."
+                                   "  Right-click another pad on the same "
+                                   "net to measure.")
+                               .arg(QString::fromStdString(pad.name))
+                               .arg(net_name));
+            return;
+        }
+        // Second pick.
+        const int a = probe_pad_a_;
+        const int b = hit.element_index;
+        probe_pad_a_ = -1;
+        if (a == b) {
+            emit probeHint("Probe R: same pad picked twice -- cancelled.");
+            return;
+        }
+        const auto& pa = board_->pads[a];
+        const auto& pb = board_->pads[b];
+        if (pa.net_id != pb.net_id) {
+            emit probeHint("Probe R: pads are on different nets -- "
+                           "cancelled.");
+            return;
+        }
+        const int layer_ord = pa.layer_ordinals.empty()
+            ? hit.layer_ordinal
+            : pa.layer_ordinals.front();
+        emit probeRequested(a, b, pa.net_id, layer_ord);
     }
 }
 

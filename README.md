@@ -68,8 +68,9 @@ ctest --test-dir build
 5. **Transient dock** — step current, dt, n_steps, eps_r, substrate thickness. Plot V(t) at the observation node + max |V| over the mesh.
 6. **Net Stats dock** — sortable per-net summary: pads, segments, length, copper area.
 7. **Hover anywhere** — status bar shows net + layer + geometry. When a heat map is active, also shows the voltage at the cursor position.
-8. **File > Save Canvas as Image / Export Results as CSV** — share results.
-9. **View > Fit to Board (Home)**, Ctrl+I runs IR drop.
+8. **Right-click two pads on the same net** — pdnkit runs a 1 A injection between them and pops up the effective resistance (the GUI version of `--probe-r`). Useful for spot-checking VRM-to-load drop without setting up a full per-pad current table.
+9. **File > Save Canvas as Image / Export Results as CSV** — share results.
+10. **View > Fit to Board (Home)**, Ctrl+I runs IR drop.
 
 Window geometry, dock state, and camera position persist across launches.
 

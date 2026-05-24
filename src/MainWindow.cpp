@@ -193,6 +193,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     hover_label_->setMinimumWidth(300);
     statusBar()->addPermanentWidget(hover_label_);
     connect(canvas_, &PcbCanvas::hoverInfo, hover_label_, &QLabel::setText);
+    connect(canvas_, &PcbCanvas::probeHint, this, [this](const QString& m) {
+        statusBar()->showMessage(m, 8000);
+    });
+    connect(canvas_, &PcbCanvas::probeRequested,
+            this, &MainWindow::onProbeRequested);
 
     statusBar()->showMessage("Ready");
 
@@ -516,6 +521,7 @@ void MainWindow::onShortcutsDialog() {
         "<tr><td><b>Drag</b></td><td>Pan</td></tr>"
         "<tr><td><b>Wheel</b></td><td>Zoom toward cursor</td></tr>"
         "<tr><td><b>Hover</b></td><td>Net + layer (+ voltage if heatmap)</td></tr>"
+        "<tr><td><b>Right-click pad</b></td><td>Probe R (click two pads on the same net)</td></tr>"
         "</table>");
 }
 
@@ -547,3 +553,78 @@ void MainWindow::dropEvent(QDropEvent* e) {
     }
 }
 
+
+
+void MainWindow::onProbeRequested(int pad_a, int pad_b,
+                                  int net_id, int layer_ord) {
+    if (!board_) return;
+    const auto* net = board_->find_net(net_id);
+    const QString net_name = (net && !net->name.empty())
+        ? QString::fromStdString(net->name)
+        : QString("(unnamed)");
+
+    pdnkit::pi::MeshConfig mc;
+    // Use the analysis panel's chosen cell size so the probe matches what
+    // the user sees in the heat map. Fall back to 0.5 mm.
+    {
+        auto cfg = analysis_panel_->currentConfig();
+        mc.cell_size = (cfg.cell_size > 0.0) ? cfg.cell_size : 0.5e-3;
+    }
+    mc.net_id = net_id;
+    mc.layer_ordinal = layer_ord;
+    mc.source_pad_indices = {pad_a};
+    mc.sink_pad_indices   = {pad_b};
+
+    auto mesh = pdnkit::pi::IrMesher::build(*board_, mc);
+    if (mesh.nodes.empty()) {
+        QMessageBox::warning(this, "Probe R",
+            "Mesher produced no nodes on net " + net_name +
+            ". Try a finer cell size or pick pads on a filled copper area.");
+        return;
+    }
+    if (mesh.source_node_ids.empty() || mesh.sink_node_ids.empty()) {
+        QMessageBox::warning(this, "Probe R",
+            "Could not attach one of the probe pads to the mesh "
+            "(pad may be outside any filled zone on the chosen layer).");
+        return;
+    }
+    auto sol = pdnkit::pi::IrSolver::solve(mesh, {1.0});
+    if (!sol.ok) {
+        QMessageBox::critical(this, "Probe R",
+            QString("Solver failed: %1")
+                .arg(QString::fromStdString(sol.error)));
+        return;
+    }
+    auto avg = [&](const std::vector<int>& ids) {
+        double acc = 0.0;
+        for (int id : ids)
+            if (id >= 0 && id < static_cast<int>(sol.voltages.size()))
+                acc += sol.voltages[id];
+        return acc / static_cast<double>(ids.size());
+    };
+    const double v_src = avg(mesh.source_node_ids);
+    const double v_snk = avg(mesh.sink_node_ids);
+    const double r = v_src - v_snk;  // 1 A injection -> R = dV / 1
+    const auto& pa = board_->pads[pad_a];
+    const auto& pb = board_->pads[pad_b];
+    const QString msg = QString(
+        "Pad %1  ->  Pad %2   on net %3\n\n"
+        "Effective resistance:\n"
+        "    R = %4 Î©   (%5 mÎ©)\n\n"
+        "(V_source = %6 V,  V_sink = %7 V at 1 A injection)")
+        .arg(QString::fromStdString(pa.name))
+        .arg(QString::fromStdString(pb.name))
+        .arg(net_name)
+        .arg(r, 0, 'e', 4)
+        .arg(r * 1000.0, 0, 'f', 4)
+        .arg(v_src, 0, 'f', 6)
+        .arg(v_snk, 0, 'f', 6);
+    QMessageBox::information(this, "Probe R", msg);
+    statusBar()->showMessage(
+        QString("Probe R %1 -> %2  on %3:  %4 mÎ©")
+            .arg(QString::fromStdString(pa.name))
+            .arg(QString::fromStdString(pb.name))
+            .arg(net_name)
+            .arg(r * 1000.0, 0, 'f', 4),
+        12000);
+}

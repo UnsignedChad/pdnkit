@@ -154,3 +154,57 @@ TEST_CASE("ohms-law: result tightens as cell size shrinks", "[ohms][validation]"
     // And the 0.25mm result must hit within 5%.
     REQUIRE(err_fine / r_ideal < 0.05);
 }
+
+
+// Validation for the GUI right-click probe-R workflow: the mesher must
+// honor explicit source/sink pad *indices* and produce the same V drop
+// as name-based picking does. Anchors the new MeshConfig path against
+// the existing one on a fixture where both should agree.
+TEST_CASE("ohms-law: source/sink_pad_indices match name-based picking",
+          "[ohms][validation][probe-r]") {
+    auto b = KicadPcbParser::parse_file(fixture("trace_100mm.kicad_pcb"));
+    REQUIRE(b.pads.size() == 2);
+
+    const int net_id = b.find_net_by_name("VRAIL")->id;
+
+    // Reference: default mesher (auto-pick leftmost/rightmost pads).
+    MeshConfig mc_ref;
+    mc_ref.cell_size = 0.5e-3;
+    mc_ref.net_id = net_id;
+    mc_ref.layer_ordinal = 0;
+    mc_ref.copper_thickness = kCuThickness;
+    mc_ref.copper_rho = kRhoCu;
+    auto mesh_ref = IrMesher::build(b, mc_ref);
+    auto sol_ref = IrSolver::solve(mesh_ref, {kCurrent});
+    REQUIRE(sol_ref.ok);
+    const double v_ref = sol_ref.max_v - sol_ref.min_v;
+
+    // Same config, but pick the pads explicitly by index (as the GUI
+    // right-click workflow does).
+    MeshConfig mc_idx = mc_ref;
+    mc_idx.source_pad_indices = {0};
+    mc_idx.sink_pad_indices   = {1};
+    auto mesh_idx = IrMesher::build(b, mc_idx);
+    REQUIRE(!mesh_idx.source_node_ids.empty());
+    REQUIRE(!mesh_idx.sink_node_ids.empty());
+    auto sol_idx = IrSolver::solve(mesh_idx, {kCurrent});
+    REQUIRE(sol_idx.ok);
+    const double v_idx = sol_idx.max_v - sol_idx.min_v;
+
+    INFO("V (auto-pick)  = " << v_ref * 1000.0 << " mV");
+    INFO("V (by-index)   = " << v_idx * 1000.0 << " mV");
+    // Identical pads picked by either path -> identical solver result
+    // (mesh layout is identical too). Allow a tiny numerical fuzz.
+    REQUIRE(std::abs(v_idx - v_ref) / v_ref < 1.0e-6);
+
+    // And swapping source/sink just flips the sign of the gradient ->
+    // the |V drop| is unchanged.
+    MeshConfig mc_swap = mc_ref;
+    mc_swap.source_pad_indices = {1};
+    mc_swap.sink_pad_indices   = {0};
+    auto mesh_swap = IrMesher::build(b, mc_swap);
+    auto sol_swap = IrSolver::solve(mesh_swap, {kCurrent});
+    REQUIRE(sol_swap.ok);
+    const double v_swap = sol_swap.max_v - sol_swap.min_v;
+    REQUIRE(std::abs(v_swap - v_ref) / v_ref < 1.0e-6);
+}

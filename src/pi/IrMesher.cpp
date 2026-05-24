@@ -593,16 +593,27 @@ IrMesh IrMesher::build(const model::Board& board, const MeshConfig& cfg) {
 
     const bool explicit_src = !cfg.source_pad_names.empty();
     const bool explicit_snk = !cfg.sink_pad_names.empty();
+    const bool explicit_src_idx = !cfg.source_pad_indices.empty();
+    const bool explicit_snk_idx = !cfg.sink_pad_indices.empty();
 
-    if (explicit_src || explicit_snk) {
-        for (const auto& pad : board.pads) {
+    auto idx_in = [](const std::vector<int>& v, int i) {
+        return std::find(v.begin(), v.end(), i) != v.end();
+    };
+
+    if (explicit_src || explicit_snk ||
+        explicit_src_idx || explicit_snk_idx) {
+        for (std::size_t i = 0; i < board.pads.size(); ++i) {
+            const auto& pad = board.pads[i];
             if (!pad_on_target(pad)) continue;
             auto nodes = pad_nodes(pad);
             if (nodes.empty()) continue;
-            if (explicit_src && name_in(cfg.source_pad_names, pad.name)) {
+            const int ii = static_cast<int>(i);
+            if ((explicit_src && name_in(cfg.source_pad_names, pad.name)) ||
+                (explicit_src_idx && idx_in(cfg.source_pad_indices, ii))) {
                 for (int nid : nodes) mesh.source_node_ids.push_back(nid);
             }
-            if (explicit_snk && name_in(cfg.sink_pad_names, pad.name)) {
+            if ((explicit_snk && name_in(cfg.sink_pad_names, pad.name)) ||
+                (explicit_snk_idx && idx_in(cfg.sink_pad_indices, ii))) {
                 for (int nid : nodes) mesh.sink_node_ids.push_back(nid);
             }
         }

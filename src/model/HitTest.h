@@ -19,6 +19,10 @@ struct Hit {
     Kind kind = Kind::None;
     int net_id = 0;
     int layer_ordinal = 0;
+    // Index into board.{pads,vias,segments,zones} depending on Kind.
+    // -1 means "no specific element," for backward compatibility with
+    // callers that only care about Kind/net/layer.
+    int element_index = -1;
 };
 
 // Returns the first Hit found in priority order. `pick_radius` is added to

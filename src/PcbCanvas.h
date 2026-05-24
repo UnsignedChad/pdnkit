@@ -55,6 +55,16 @@ public:
 signals:
     void hoverInfo(const QString& info);
 
+    // Right-click probe-R workflow. Emitted on the second right-click,
+    // after the user has picked two pads on the same net. MainWindow
+    // runs the solver and shows the result.
+    void probeRequested(int pad_a_index, int pad_b_index,
+                        int net_id, int layer_ordinal);
+
+    // Status hint emitted when the first probe pad is selected (or the
+    // selection is cancelled). MainWindow forwards to the status bar.
+    void probeHint(const QString& msg);
+
 protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
@@ -146,4 +156,8 @@ private:
 
     bool panning_ = false;
     QPoint last_mouse_;
+
+    // Right-click probe-R: index into board_->pads after the first
+    // right-click; -1 means "no pad selected yet."
+    int probe_pad_a_ = -1;
 };

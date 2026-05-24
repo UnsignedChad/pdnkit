@@ -46,6 +46,13 @@ struct MeshConfig {
     std::vector<std::string> source_pad_names;
     std::vector<std::string> sink_pad_names;
 
+    // Picking a *specific* pad (not all pads with a given designator). Used
+    // by the GUI right-click probe-R workflow, where you click two pads and
+    // want exactly those two, not every "pad 1" on the same net. Indices
+    // are into Board::pads. Empty -> fall back to name-based picking above.
+    std::vector<int> source_pad_indices;
+    std::vector<int> sink_pad_indices;
+
     // Optional per-pad current map (key = pad name, value = Amperes;
     // + injects, - draws). When non-empty, overrides BOTH source/sink lists
     // and the solver default split-over-source behavior -- the solver builds
