@@ -35,6 +35,7 @@ private slots:
 
 private:
     void rebuildPadTable();
+    void updateSumLabel();
     void rebuildExtraLayers();
 
     const pdnkit::model::Board* board_ = nullptr;
@@ -45,6 +46,7 @@ private:
     QDoubleSpinBox* default_current_spin_;
     QDoubleSpinBox* cell_size_spin_;
     QTableWidget* pad_table_;
+    class QLabel* sum_label_;
     QPushButton* auto_btn_;
     QPushButton* run_btn_;
     QPushButton* clear_btn_;

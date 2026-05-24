@@ -6,6 +6,10 @@
 #include <string>
 
 #include <QApplication>
+#include <QIcon>
+#include <QLinearGradient>
+#include <QPainter>
+#include <QPixmap>
 #include <QSurfaceFormat>
 #include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
@@ -261,6 +265,27 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     QApplication::setApplicationName("pdnkit");
     QApplication::setApplicationVersion("0.0.1");
+
+    // Programmatic app icon: viridis-gradient square with "pdn" lettering.
+    {
+        QPixmap pm(64, 64);
+        QPainter pp(&pm);
+        QLinearGradient g(0, 0, 0, 64);
+        g.setColorAt(0.00, QColor(68,   1,  84));
+        g.setColorAt(0.25, QColor(59,  81, 139));
+        g.setColorAt(0.50, QColor(33, 145, 140));
+        g.setColorAt(0.75, QColor(94, 201,  97));
+        g.setColorAt(1.00, QColor(253, 231,  37));
+        pp.fillRect(QRect(0, 0, 64, 64), g);
+        pp.setPen(QColor(15, 15, 18));
+        QFont f = pp.font();
+        f.setBold(true);
+        f.setPointSize(20);
+        pp.setFont(f);
+        pp.drawText(QRect(0, 0, 64, 64), Qt::AlignCenter, "pdn");
+        pp.end();
+        QApplication::setWindowIcon(QIcon(pm));
+    }
 
     spdlog::info("pdnkit starting");
 

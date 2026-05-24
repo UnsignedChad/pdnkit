@@ -34,6 +34,7 @@ private slots:
     void onAnalyzeStaticIrDrop();
     void onSaveCanvasImage();
     void onExportResultsCsv();
+    void onAboutDialog();
 
 private:
     void populateLayerPanel();

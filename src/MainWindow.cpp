@@ -117,6 +117,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         legend_->setRange(0, 0);
     });
 
+    auto* helpMenu = menuBar()->addMenu("&Help");
+    auto* aboutAct = helpMenu->addAction("&About pdnkit...");
+    connect(aboutAct, &QAction::triggered, this, &MainWindow::onAboutDialog);
+
     // Permanent label on the right of the status bar for hover info.
     hover_label_ = new QLabel(this);
     hover_label_->setMinimumWidth(300);
@@ -348,4 +352,20 @@ void MainWindow::onReloadBoard() {
     if (!loadKicadPcb(current_board_path_)) {
         // loadKicadPcb already showed an error box; status bar will reflect it.
     }
+}
+
+void MainWindow::onAboutDialog() {
+    QMessageBox::about(this, "About pdnkit",
+        "<h3>pdnkit 0.0.1</h3>"
+        "<p>Open-source Power Integrity analysis for KiCad PCBs.</p>"
+        "<p><b>Pillars:</b></p>"
+        "<ul>"
+        "<li>Static IR drop (sparse Cholesky, multi-layer mesh, via wiring)</li>"
+        "<li>Frequency-domain plane Z(f) (cavity model, decap network, "
+        "greedy decap optimizer)</li>"
+        "</ul>"
+        "<p>Built with C++20, Qt 6, Eigen + SuiteSparse / CHOLMOD, earcut.hpp.</p>"
+        "<p>License: GPL-3.0<br>"
+        "Source: <a href=\"https://github.com/UnsignedChad/pdnkit\">"
+        "github.com/UnsignedChad/pdnkit</a></p>");
 }

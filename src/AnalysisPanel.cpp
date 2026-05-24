@@ -87,6 +87,9 @@ AnalysisPanel::AnalysisPanel(QWidget* parent) : QWidget(parent) {
     pad_table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     outer->addWidget(pad_table_, 1);
 
+    sum_label_ = new QLabel("Sum: 0.000 mA");
+    outer->addWidget(sum_label_);
+
     auto_btn_ = new QPushButton("Auto-balance");
     auto_btn_->setToolTip(
         "Set the first pad in the list to +Default I and the last to "
@@ -105,6 +108,8 @@ AnalysisPanel::AnalysisPanel(QWidget* parent) : QWidget(parent) {
             this, &AnalysisPanel::onNetOrLayerChanged);
     connect(layer_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &AnalysisPanel::onNetOrLayerChanged);
+    connect(pad_table_, &QTableWidget::cellChanged, this,
+            [this](int, int){ updateSumLabel(); });
     connect(auto_btn_,    &QPushButton::clicked, this, &AnalysisPanel::onAutoBalance);
     connect(run_btn_,     &QPushButton::clicked, this, &AnalysisPanel::runRequested);
     connect(clear_btn_,   &QPushButton::clicked, this, &AnalysisPanel::clearRequested);
@@ -176,6 +181,7 @@ void AnalysisPanel::rebuildExtraLayers() {
 }
 
 void AnalysisPanel::rebuildPadTable() {
+    QSignalBlocker blocker(pad_table_);
     pad_table_->setRowCount(0);
     if (!board_ || net_combo_->count() == 0 || layer_combo_->count() == 0) {
         return;
@@ -224,10 +230,14 @@ void AnalysisPanel::rebuildPadTable() {
         }
         spin->setValue(seed);
         pad_table_->setCellWidget(i, 2, spin);
+        QObject::connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                         this, [this](double){ updateSumLabel(); });
     }
+    updateSumLabel();
 }
 
 void AnalysisPanel::onAutoBalance() {
+    QSignalBlocker blocker(pad_table_);
     const int n = pad_table_->rowCount();
     if (n == 0) return;
     const double default_mA = default_current_spin_->value();
@@ -241,6 +251,22 @@ void AnalysisPanel::onAutoBalance() {
             s->setValue(default_mA);
         }
     }
+    updateSumLabel();
+}
+
+void AnalysisPanel::updateSumLabel() {
+    double sum_mA = 0.0;
+    for (int r = 0; r < pad_table_->rowCount(); ++r) {
+        auto* s = row_spin(pad_table_, r);
+        if (s) sum_mA += s->value();
+    }
+    const bool balanced = std::abs(sum_mA) < 1e-6;
+    sum_label_->setText(QString("Sum: %1 mA  %2")
+        .arg(sum_mA, 0, 'f', 3)
+        .arg(balanced ? "(balanced)" : "(unbalanced — solver will refuse)"));
+    sum_label_->setStyleSheet(balanced
+        ? "color: #88c088;"
+        : "color: #d44; font-weight: bold;");
 }
 
 pdnkit::pi::MeshConfig AnalysisPanel::currentConfig() const {
