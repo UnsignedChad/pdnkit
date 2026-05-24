@@ -23,10 +23,11 @@ find_package(Eigen3 REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(CLI11 REQUIRED)
 
-# Core static library: parsing, model, mesher, solver code.
-# Both the GUI binary and the test binary link against it.
+# Core static library: parsing, model, mesher, solver.
+# Linked by both the GUI binary and the test binary.
 add_library(pdnkit_core STATIC
     src/sexpr/SExpr.cpp
+    src/parser/KicadPcbParser.cpp
 )
 target_include_directories(pdnkit_core PUBLIC src)
 target_link_libraries(pdnkit_core PUBLIC
