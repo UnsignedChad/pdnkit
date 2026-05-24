@@ -2,6 +2,7 @@
 
 #include <QMainWindow>
 #include <QString>
+#include <QStringList>
 #include <memory>
 
 #include "model/Board.h"
@@ -39,6 +40,8 @@ private slots:
 
 private:
     void populateLayerPanel();
+    void updateRecentMenu();
+    void addRecent(const QString& path);
 
     PcbCanvas* canvas_;
     LayerPanel* layer_panel_;
@@ -52,4 +55,6 @@ private:
     pdnkit::pi::IrMesh last_mesh_;
     pdnkit::pi::Solution last_solution_;
     QString current_board_path_;
+    QStringList recent_files_;
+    class QMenu* recent_menu_ = nullptr;
 };

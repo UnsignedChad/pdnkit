@@ -10,6 +10,7 @@
 #include <QHBoxLayout>
 #include <QFileInfo>
 #include <QLabel>
+#include <QMenu>
 #include <QMenuBar>
 #include <QImage>
 #include <QMessageBox>
@@ -110,6 +111,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* openAct = fileMenu->addAction("&Open KiCad PCB...");
     openAct->setShortcut(QKeySequence::Open);
     connect(openAct, &QAction::triggered, this, &MainWindow::onOpenKicadPcb);
+    recent_menu_ = fileMenu->addMenu("Open &Recent");
     auto* reloadAct = fileMenu->addAction("&Reload");
     reloadAct->setShortcut(QKeySequence("Ctrl+R"));
     connect(reloadAct, &QAction::triggered, this, &MainWindow::onReloadBoard);
@@ -163,6 +165,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         restoreState(st);
     }
     canvas_->restoreSettings(settings);
+    recent_files_ = settings.value("recent/files").toStringList();
+    updateRecentMenu();
 }
 
 void MainWindow::closeEvent(QCloseEvent* e) {
@@ -170,6 +174,7 @@ void MainWindow::closeEvent(QCloseEvent* e) {
     settings.setValue("window/geometry", saveGeometry());
     settings.setValue("window/state", saveState());
     canvas_->saveSettings(settings);
+    settings.setValue("recent/files", recent_files_);
     QMainWindow::closeEvent(e);
 }
 
@@ -302,6 +307,7 @@ bool MainWindow::loadKicadPcb(const QString& path) {
         canvas_->setBoard(board_.get());
         populateLayerPanel();
         current_board_path_ = path;
+        addRecent(path);
         analysis_panel_->setBoard(board_.get());
         netstats_panel_->setBoard(board_.get());
         cavity_panel_->setBoard(board_.get());
@@ -403,3 +409,47 @@ void MainWindow::onAboutDialog() {
         "Source: <a href=\"https://github.com/UnsignedChad/pdnkit\">"
         "github.com/UnsignedChad/pdnkit</a></p>");
 }
+
+void MainWindow::addRecent(const QString& path) {
+    QFileInfo fi(path);
+    const QString canon = fi.canonicalFilePath();
+    if (canon.isEmpty()) return;
+    recent_files_.removeAll(canon);
+    recent_files_.prepend(canon);
+    constexpr int kMaxRecent = 8;
+    while (recent_files_.size() > kMaxRecent) recent_files_.removeLast();
+    updateRecentMenu();
+}
+
+void MainWindow::updateRecentMenu() {
+    if (!recent_menu_) return;
+    recent_menu_->clear();
+
+    // Drop entries that no longer exist on disk.
+    QStringList alive;
+    for (const QString& p : recent_files_) {
+        if (QFileInfo::exists(p)) alive << p;
+    }
+    if (alive.size() != recent_files_.size()) recent_files_ = alive;
+
+    if (recent_files_.isEmpty()) {
+        auto* empty = recent_menu_->addAction("(no recent files)");
+        empty->setEnabled(false);
+        return;
+    }
+    for (const QString& p : recent_files_) {
+        QFileInfo fi(p);
+        const QString label = fi.fileName() + "  -  " + fi.path();
+        auto* act = recent_menu_->addAction(label);
+        connect(act, &QAction::triggered, this, [this, p]() {
+            loadKicadPcb(p);
+        });
+    }
+    recent_menu_->addSeparator();
+    auto* clear = recent_menu_->addAction("Clear list");
+    connect(clear, &QAction::triggered, this, [this]() {
+        recent_files_.clear();
+        updateRecentMenu();
+    });
+}
+
